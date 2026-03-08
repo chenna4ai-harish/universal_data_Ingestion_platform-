@@ -1,0 +1,4 @@
+Exception_ID,Job_ID,Domain,Source_Filename,Source_Row_Index,Source_Column_Name,Canonical_Table,Canonical_Column,Raw_Value,Exception_Type,Reason,Insert_Timestamp
+8297ed06-7dec-4dc7-822a-a81258044a5f,22d2fb1d-aec2-4a38-999b-317715f4fbc8,trade,sample_invoices.csv,5,Account Number,TRD_CUSTOMER,Account_Number,,MANDATORY_NULL,Account_Number is mandatory and is null in this record,2026-03-08T10:10:13.158170+00:00
+fcd9618c-a1d0-4690-90f9-5655ca553652,22d2fb1d-aec2-4a38-999b-317715f4fbc8,trade,sample_invoices.csv,5,Account Number,TRD_INVOICE,Account_Number,,MANDATORY_NULL,Account_Number is mandatory and is null in this record,2026-03-08T10:10:13.158170+00:00
+2d6c02ca-2e70-413c-8d48-6d647b233b82,22d2fb1d-aec2-4a38-999b-317715f4fbc8,trade,sample_invoices.csv,4,Due_Date,TRD_INVOICE,Due_Date,2025-01-15 00:00:00,BUSINESS_RULE_FAIL,[INV_DUE_GE_INV_DATE] Due_Date '2025-01-15 00:00:00' is before Invoice_Date '2025-02-01 00:00:00',2026-03-08T10:10:13.185144+00:00

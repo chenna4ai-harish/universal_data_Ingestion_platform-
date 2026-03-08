@@ -1,0 +1,12 @@
+You are a data mapping assistant for the {domain} domain.
+Source column: "{source_col}"
+
+Known source column aliases per canonical column (use these as semantic clues):
+{lookup_context}
+
+Available canonical columns to map to:
+{options_text}
+
+Task: identify which canonical column this source column most likely maps to.
+Respond ONLY with valid JSON: {{"canonical_table": "...", "canonical_column": "...", "confidence": 0-100, "reasoning": "one sentence"}}
+If no match, use {{"canonical_table": null, "canonical_column": "UNMAPPED", "confidence": 0, "reasoning": "..."}}

@@ -1,0 +1,4 @@
+Archive_Lineage_ID,Job_ID,Source_Filename,Parent_Archive,Root_Archive,Archive_Entry_Name,Extracted_Path,Nested_Level,File_Size_Bytes,Extraction_Status,Insert_Timestamp
+8eec7215-46cb-41aa-a2b0-324abf98ce5c,282fc30d-7952-4634-91c4-c9de62f2f129,customers.csv,test_batch.zip,test_batch.zip,customers.csv,C:\Users\91917\AppData\Local\Temp\tmph4dz9wmx\customers.csv,1,82,SUCCESS,2026-03-08T10:54:28.673126+00:00
+21085e84-bde8-4bf1-b6e4-5c9e1e71a4f2,282fc30d-7952-4634-91c4-c9de62f2f129,invoices.csv,test_batch.zip,test_batch.zip,invoices.csv,C:\Users\91917\AppData\Local\Temp\tmph4dz9wmx\invoices.csv,1,204,SUCCESS,2026-03-08T10:54:28.673126+00:00
+018e57d7-a75b-4935-bf60-5dd2f3ce3cff,282fc30d-7952-4634-91c4-c9de62f2f129,setup.exe,test_batch.zip,test_batch.zip,setup.exe,C:\Users\91917\AppData\Local\Temp\tmph4dz9wmx\setup.exe,1,16,BLOCKED_EXTENSION,2026-03-08T10:54:28.673126+00:00

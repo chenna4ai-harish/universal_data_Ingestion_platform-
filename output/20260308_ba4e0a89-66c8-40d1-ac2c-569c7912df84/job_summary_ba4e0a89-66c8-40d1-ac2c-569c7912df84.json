@@ -1,0 +1,21 @@
+{
+  "Job_ID": "ba4e0a89-66c8-40d1-ac2c-569c7912df84",
+  "Domain": "trade",
+  "Source_Filename": "unmapped_test.csv",
+  "Job_Status": "SUCCESS",
+  "Files_Processed": 1,
+  "Files_Failed": 0,
+  "Total_Source_Rows": 1,
+  "Total_Canonical_Rows_Written": 0,
+  "Total_Exceptions": 0,
+  "Columns_Mapped_Exact": 0,
+  "Columns_Mapped_Fuzzy": 0,
+  "Columns_Mapped_LLM": 0,
+  "Columns_Unmapped": 2,
+  "Mandatory_Columns_Blocked": 0,
+  "Blocked_Mandatory_Details": [],
+  "Job_Start_Timestamp": "2026-03-08T10:55:40.349719+00:00",
+  "Job_End_Timestamp": "2026-03-08T10:55:40.437721+00:00",
+  "Config_Version": "1.2",
+  "Canonical_Model_Version": "1.3"
+}

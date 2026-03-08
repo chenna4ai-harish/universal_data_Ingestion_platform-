@@ -1,0 +1,272 @@
+{
+  "_metadata": {
+    "config_version": "1.2",
+    "domain_key": "trade",
+    "instructions": "This is the system config for the TRADE domain. Edit values here to change behaviour for trade files only. Do not edit application code."
+  },
+  "domain": {
+    "name": "Trade Credit Payments",
+    "description": "Supplier accounts receivable and invoice payment data from trade credit contributors",
+    "canonical_tables": [
+      "TRD_CUSTOMER",
+      "TRD_INVOICE"
+    ]
+  },
+  "llm": {
+    "provider": "None",
+    "_provider_options": [
+      "None",
+      "Claude",
+      "OpenAI",
+      "Gemini"
+    ],
+    "model": {
+      "Claude": "claude-opus-4-6",
+      "OpenAI": "gpt-4o",
+      "Gemini": "gemini-2.0-flash"
+    },
+    "_model_tiers": {
+      "Claude_economy":  "claude-haiku-4-5-20251001",
+      "Claude_balanced": "claude-sonnet-4-6",
+      "Claude_best":     "claude-opus-4-6",
+      "OpenAI_economy":  "gpt-4o-mini",
+      "OpenAI_balanced": "gpt-4o",
+      "OpenAI_best":     "o3",
+      "Gemini_economy":  "gemini-2.0-flash-lite",
+      "Gemini_balanced": "gemini-2.0-flash",
+      "Gemini_best":     "gemini-2.5-pro"
+    },
+    "confidence_accept_threshold": 55,
+    "apply_to": "unmatched_only",
+    "_apply_to_options": [
+      "all",
+      "unmatched_only"
+    ],
+    "max_tokens": 1000,
+    "temperature": 0,
+    "timeout_seconds": 30
+  },
+  "matching": {
+    "fuzzy_min_similarity": 0.7,
+    "fuzzy_confidence_multiplier": 0.91,
+    "exact_confidence": 100,
+    "normalisation": {
+      "lowercase": true,
+      "spaces_to_underscore": true,
+      "hyphens_to_underscore": true,
+      "dots_to_underscore": true,
+      "strip_special_chars": true,
+      "collapse_underscores": true,
+      "strip_leading_trailing_underscores": true
+    },
+    "allow_shared_key_multi_target_propagation": true,
+    "_propagation_scope_note": "Propagation triggers for ANY source column that resolves (via exact lookup or fuzzy) to a canonical column that is a shared key. The source_column_variants list below is the seed for exact-only propagation when no lookup match is found.",
+    "shared_key_propagation_rules": [
+      {
+        "source_column_variants": [
+          "account_number",
+          "account_no",
+          "acct_no",
+          "customer_number"
+        ],
+        "targets": [
+          {
+            "canonical_table": "TRD_CUSTOMER",
+            "canonical_column": "Account_Number"
+          },
+          {
+            "canonical_table": "TRD_INVOICE",
+            "canonical_column": "Account_Number"
+          }
+        ]
+      }
+    ],
+    "llm_disambiguation_required_below": 70,
+    "auto_block_unmapped_mandatory": true
+  },
+  "quality": {
+    "mandatory_threshold": 80,
+    "dq_pass_fill_rate": 95,
+    "dq_warn_fill_rate": 70,
+    "null_values": [
+      "",
+      "null",
+      "NULL",
+      "n/a",
+      "N/A",
+      "na",
+      "NA",
+      "none",
+      "NONE",
+      "--",
+      "-",
+      "0000-00-00",
+      "00/00/0000"
+    ],
+    "type_validation": {
+      "numeric": {
+        "enabled": true,
+        "strip_chars": [
+          "$",
+          "£",
+          "€",
+          "¥",
+          ",",
+          " "
+        ]
+      },
+      "date": {
+        "enabled": true
+      },
+      "string": {
+        "enabled": false
+      }
+    },
+    "referential_integrity": {
+      "enabled": true,
+      "rules": [
+        {
+          "from_table": "TRD_INVOICE",
+          "from_column": "Account_Number",
+          "to_table": "TRD_CUSTOMER",
+          "to_column": "Account_Number",
+          "severity": "FAIL"
+        }
+      ]
+    },
+    "duplicate_detection": {
+      "enabled": true,
+      "keys": {
+        "TRD_CUSTOMER": [
+          "Account_Number"
+        ],
+        "TRD_INVOICE": [
+          "Account_Number",
+          "Invoice_Number",
+          "Invoice_Date"
+        ]
+      }
+    },
+    "business_rules": [
+      {
+        "rule_id": "INV_DUE_GE_INV_DATE",
+        "description": "Due_Date must be >= Invoice_Date",
+        "severity": "FAIL"
+      },
+      {
+        "rule_id": "PAID_LE_INVOICE",
+        "description": "Paid_Amount must be <= Invoice_Amount",
+        "severity": "FAIL"
+      },
+      {
+        "rule_id": "CURRENCY_ISO4217",
+        "description": "Currency must be valid ISO 4217 code",
+        "severity": "WARN"
+      }
+    ]
+  },
+  "output": {
+    "canonical_prefix": "canonical_trade",
+    "exceptions_prefix": "exceptions_trade",
+    "dq_report_prefix": "dq_trade",
+    "preview_rows": 20,
+    "max_exceptions_display": 200
+  },
+  "contributor_overrides": {
+    "_note": "Add contributor-specific threshold or null overrides here. Key = contributor ID.",
+    "_example_CONTRIB001": {
+      "mandatory_threshold": 90,
+      "null_values_extra": [
+        "UNKNOWN",
+        "N/P"
+      ]
+    }
+  },
+  "ingestion": {
+    "accept_archives": true,
+    "allowed_archive_types": [
+      "zip"
+    ],
+    "enable_nested_archives": true,
+    "max_archive_nesting_depth": 5,
+    "max_files_per_archive": 5000,
+    "max_uncompressed_size_mb": 2048,
+    "max_single_extracted_file_mb": 500,
+    "block_encrypted_archives": true,
+    "detect_zip_slip": true,
+    "quarantine_failed_entries": true,
+    "blocked_extensions": [
+      ".exe",
+      ".dll",
+      ".js",
+      ".bat",
+      ".cmd",
+      ".vbs",
+      ".msi"
+    ]
+  },
+  "file_type_coverage": {
+    "structured": [
+      "csv",
+      "tsv",
+      "pipe_delimited",
+      "semicolon_delimited",
+      "xlsx",
+      "xls",
+      "json",
+      "xml"
+    ],
+    "semi_structured": [
+      "txt",
+      "html"
+    ],
+    "documents": [
+      "pdf_text",
+      "pdf_scanned_ocr",
+      "docx"
+    ],
+    "archive_containers": [
+      "zip"
+    ],
+    "unsupported_for_poc": [
+      "7z",
+      "rar",
+      "tar",
+      "gz",
+      "bz2",
+      "pptx",
+      "rtf",
+      "ixbrl"
+    ]
+  },
+  "text_extraction": {
+    "encoding_detection_order": [
+      "utf-8-sig",
+      "utf-16",
+      "utf-8",
+      "cp1252",
+      "latin-1"
+    ],
+    "unicode_normalization": "NFKC",
+    "strip_control_characters": true,
+    "collapse_repeated_whitespace": true,
+    "preserve_line_breaks": true,
+    "ocr_enabled_for_scanned_documents": true,
+    "ocr_languages": [
+      "eng"
+    ],
+    "minimum_extracted_characters": 20,
+    "max_garbled_character_ratio": 0.15,
+    "empty_text_action": "route_to_exception"
+  },
+  "system_tables": {
+    "scope": "global",
+    "reference_file": "global_system_tables.json",
+    "tables": [
+      "RECORD_EXCEPTIONS",
+      "COLUMN_LINEAGE"
+    ],
+    "owner": "pipeline_engine",
+    "enforce_domain_canonical_no_redefinition": true
+  }
+}

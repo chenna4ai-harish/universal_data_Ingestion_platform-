@@ -1,0 +1,3 @@
+Lineage_ID,Mapping_Reference_ID,Job_ID,Domain,Source_Filename,Source_Column_Name,Source_Column_Normalised,Canonical_Table,Canonical_Column,Match_Method,Confidence_Score,Was_Mandatory,Met_Threshold,LLM_Reasoning,Lookup_Variant_Matched,Archive_Lineage_ID,Insert_Timestamp
+fe30acff-ffc1-41f1-b67e-1c66217bad70,db4172d4-626a-4121-a4ef-bad91a7e6144,ba4e0a89-66c8-40d1-ac2c-569c7912df84,trade,unmapped_test.csv,foo,foo,,UNMAPPED,NO MATCH,0,False,False,,,,2026-03-08T10:55:40.392851+00:00
+87396e45-9abe-4d6d-9ab2-86fe83e8d8f5,db4172d4-626a-4121-a4ef-bad91a7e6144,ba4e0a89-66c8-40d1-ac2c-569c7912df84,trade,unmapped_test.csv,bar,bar,,UNMAPPED,NO MATCH,0,False,False,,,,2026-03-08T10:55:40.392851+00:00

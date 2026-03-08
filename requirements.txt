@@ -1,0 +1,29 @@
+# UI
+gradio>=4.44.0
+python-dotenv>=1.0.0
+
+# Core data processing
+pandas>=2.0.0
+openpyxl>=3.1.0          # .xlsx reading/writing
+xlrd>=2.0.1              # .xls reading
+
+# Document parsing
+python-docx>=1.1.0       # .docx extraction
+pdfplumber>=0.10.0       # PDF text extraction
+lxml>=4.9.0              # XML parsing + pandas read_xml backend
+
+# HTML parsing (used by pandas read_html)
+beautifulsoup4>=4.12.0
+html5lib>=1.1
+
+# Encoding detection (optional but improves auto-detect)
+chardet>=5.0.0
+
+# OCR (optional — only needed for scanned PDF support)
+# pytesseract>=0.3.10
+# Pillow>=10.0.0
+
+# LLM integrations (install the one(s) you need)
+anthropic>=0.40.0            # Claude
+openai>=1.0.0                # OpenAI
+google-generativeai>=0.8.0   # Gemini

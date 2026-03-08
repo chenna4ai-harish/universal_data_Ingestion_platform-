@@ -1,0 +1,290 @@
+{
+  "_metadata": {
+    "version": "1.3",
+    "domain": "trade",
+    "tables": [
+      "TRD_CUSTOMER",
+      "TRD_INVOICE"
+    ],
+    "column_groups": {
+      "business_columns": "Sourced from contributor file via lookup/LLM mapping. Subject to DQ checks.",
+      "audit_columns": "System-generated always. Timestamps, version, job reference. Never from contributor.",
+      "lineage_columns": "System-generated. Traces which file, row, and mapping decisions produced this record."
+    },
+    "system_tables": [
+      "RECORD_EXCEPTIONS",
+      "COLUMN_LINEAGE"
+    ],
+    "system_tables_note": "System tables are global and engine-owned. See global_system_tables.json.",
+    "business_tables": [
+      "TRD_CUSTOMER",
+      "TRD_INVOICE"
+    ],
+    "system_tables_ref": {
+      "file": "global_system_tables.json",
+      "version": "1.0",
+      "tables": [
+        "RECORD_EXCEPTIONS",
+        "COLUMN_LINEAGE"
+      ]
+    }
+  },
+  "TRD_CUSTOMER": {
+    "description": "Normalised buyer/customer identity and address data.",
+    "business_columns": {
+      "Account_Number": {
+        "mandatory": true,
+        "type": "string",
+        "description": "Buyer account number in supplier AR system. Primary link key to TRD_INVOICE."
+      },
+      "DUNS_Number": {
+        "mandatory": false,
+        "type": "string",
+        "description": "Nine-digit D-U-N-S number identifying the buyer entity."
+      },
+      "Government_ID": {
+        "mandatory": false,
+        "type": "string",
+        "description": "National identifier: VAT, Tax ID, EIN. Varies by country."
+      },
+      "Company_Name": {
+        "mandatory": true,
+        "type": "string",
+        "description": "Legal or trading name of the buyer company."
+      },
+      "Country_Code": {
+        "mandatory": false,
+        "type": "string",
+        "description": "ISO 3166-1 alpha-2 country code."
+      },
+      "Address_1": {
+        "mandatory": false,
+        "type": "string",
+        "description": "Primary street address line."
+      },
+      "Address_2": {
+        "mandatory": false,
+        "type": "string",
+        "description": "Secondary address: suite, unit, floor."
+      },
+      "City": {
+        "mandatory": false,
+        "type": "string",
+        "description": "City of buyer address."
+      },
+      "State": {
+        "mandatory": false,
+        "type": "string",
+        "description": "State, province, or region."
+      },
+      "Postcode": {
+        "mandatory": false,
+        "type": "string",
+        "description": "Postal or ZIP code. Stored as string."
+      }
+    },
+    "audit_columns": {
+      "Record_Status": {
+        "type": "string",
+        "system_generated": true,
+        "description": "ACTIVE / SUPERSEDED / DELETED",
+        "allowed_values": [
+          "ACTIVE",
+          "SUPERSEDED",
+          "DELETED"
+        ]
+      },
+      "Record_Version": {
+        "type": "integer",
+        "system_generated": true,
+        "description": "Version counter. Starts at 1. Increments on re-submission."
+      },
+      "Effective_From_Date": {
+        "type": "date",
+        "system_generated": true,
+        "description": "Date from which this record version is valid."
+      },
+      "Effective_To_Date": {
+        "type": "date",
+        "system_generated": true,
+        "description": "Date this version was superseded. NULL = current active version."
+      },
+      "Insert_Timestamp": {
+        "type": "timestamp",
+        "system_generated": true,
+        "description": "UTC timestamp when row was written to canonical table."
+      },
+      "Last_Modified_Timestamp": {
+        "type": "timestamp",
+        "system_generated": true,
+        "description": "UTC timestamp of last update."
+      },
+      "Inserted_By_Job": {
+        "type": "string",
+        "system_generated": true,
+        "description": "Job ID that created this row. Join to ingestion history."
+      },
+      "Last_Modified_By_Job": {
+        "type": "string",
+        "system_generated": true,
+        "description": "Job ID of most recent modification."
+      },
+      "Processing_System": {
+        "type": "string",
+        "system_generated": true,
+        "description": "Pipeline version that produced this record."
+      }
+    },
+    "lineage_columns": {
+      "Source_Filename": {
+        "type": "string",
+        "system_generated": true,
+        "description": "Original contributor filename this record came from."
+      },
+      "Source_Row_Index": {
+        "type": "integer",
+        "system_generated": true,
+        "description": "Row number in source file. Row 1 = first data row after header."
+      },
+      "Source_Contributor_ID": {
+        "type": "string",
+        "system_generated": true,
+        "description": "Contributor who submitted the file."
+      },
+      "Source_File_Format": {
+        "type": "string",
+        "system_generated": true,
+        "description": "Detected format: CSV / JSON / XML / XLSX / TXT / TSV."
+      },
+      "Mapping_Reference_ID": {
+        "type": "string",
+        "system_generated": true,
+        "description": "FK to COLUMN_LINEAGE. Full column-level mapping audit. JOIN COLUMN_LINEAGE ON Mapping_Reference_ID."
+      }
+    }
+  },
+  "TRD_INVOICE": {
+    "description": "Normalised invoice and accounts receivable transaction records.",
+    "business_columns": {
+      "Account_Number": {
+        "mandatory": true,
+        "type": "string",
+        "description": "Buyer account number. FK to TRD_CUSTOMER.Account_Number."
+      },
+      "DOE": {
+        "mandatory": true,
+        "type": "date",
+        "description": "Date of Experience — reporting cut-off date for this submission batch."
+      },
+      "Invoice_Number": {
+        "mandatory": true,
+        "type": "string",
+        "description": "Unique invoice reference assigned by the supplier."
+      },
+      "Invoice_Date": {
+        "mandatory": true,
+        "type": "date",
+        "description": "Date the invoice was issued."
+      },
+      "Due_Date": {
+        "mandatory": true,
+        "type": "date",
+        "description": "Contractual payment due date. Used to calculate days past due."
+      },
+      "Invoice_Amount": {
+        "mandatory": true,
+        "type": "numeric",
+        "description": "Original gross invoice amount."
+      },
+      "Paid_Date": {
+        "mandatory": false,
+        "type": "date",
+        "description": "Date invoice was fully paid. Null for open or partial."
+      },
+      "Paid_Amount": {
+        "mandatory": false,
+        "type": "numeric",
+        "description": "Amount paid. May be less than Invoice_Amount for partial payments."
+      },
+      "Payment_Terms": {
+        "mandatory": true,
+        "type": "string",
+        "description": "Agreed payment terms e.g. Net 30, Net 60."
+      },
+      "Invoice_Type": {
+        "mandatory": false,
+        "type": "string",
+        "description": "OPEN / PAID / CREDIT / ADJUSTMENT."
+      },
+      "Currency": {
+        "mandatory": false,
+        "type": "string",
+        "description": "ISO 4217 currency code e.g. USD, GBP, EUR."
+      }
+    },
+    "audit_columns": {
+      "Record_Status": {
+        "type": "string",
+        "system_generated": true,
+        "description": "ACTIVE / SUPERSEDED / DELETED"
+      },
+      "Record_Version": {
+        "type": "integer",
+        "system_generated": true,
+        "description": "Version counter."
+      },
+      "Insert_Timestamp": {
+        "type": "timestamp",
+        "system_generated": true,
+        "description": "UTC timestamp when row was written."
+      },
+      "Last_Modified_Timestamp": {
+        "type": "timestamp",
+        "system_generated": true,
+        "description": "UTC timestamp of last update."
+      },
+      "Inserted_By_Job": {
+        "type": "string",
+        "system_generated": true,
+        "description": "Job ID that created this row."
+      },
+      "Last_Modified_By_Job": {
+        "type": "string",
+        "system_generated": true,
+        "description": "Job ID of most recent modification."
+      },
+      "Processing_System": {
+        "type": "string",
+        "system_generated": true,
+        "description": "Pipeline version that produced this record."
+      }
+    },
+    "lineage_columns": {
+      "Source_Filename": {
+        "type": "string",
+        "system_generated": true,
+        "description": "Original contributor filename."
+      },
+      "Source_Row_Index": {
+        "type": "integer",
+        "system_generated": true,
+        "description": "Row number in source file."
+      },
+      "Source_Contributor_ID": {
+        "type": "string",
+        "system_generated": true,
+        "description": "Contributor who submitted the file."
+      },
+      "Source_File_Format": {
+        "type": "string",
+        "system_generated": true,
+        "description": "Detected file format."
+      },
+      "Mapping_Reference_ID": {
+        "type": "string",
+        "system_generated": true,
+        "description": "FK to COLUMN_LINEAGE."
+      }
+    }
+  }
+}
