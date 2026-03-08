@@ -49,8 +49,37 @@ This document explains every control in the Gradio UI and what it does in the pi
   - Lines missing `=` or `.` are ignored.
   - Valid overrides take highest priority over exact/fuzzy/LLM.
 
+### Analyze Mapping button
+- Step 1 action before execution.
+- Parses input and runs mapping only (exact -> fuzzy -> LLM -> override -> propagation).
+- Produces a scorecard with:
+  - `Source_File`
+  - `Source_Column`
+  - `Suggested_Target`
+  - `Selected_Target`
+  - `Match_Method`
+  - `Confidence_Score`
+  - `Was_Mandatory`
+  - `Met_Threshold`
+  - `Is_Propagated`
+  - `LLM_Reasoning`
+- Enables the `Run Pipeline` button after a successful analysis.
+
+### Dropdown mapping editor (optional)
+- `Source column` dropdown: select source column from the analysis result.
+- `Canonical target` dropdown: select target `TABLE.Column`.
+- `Apply Selected Override`: writes/updates the override line in the textbox.
+- `Clear Selected Override`: removes the override for selected source column.
+- Re-run `Analyze Mapping` after changes to refresh scorecard.
+
 ### Run Pipeline button
-- Executes a full job and populates other tabs (Results, Lineage, Log, Downloads).
+- Step 2 action.
+- Runs full pipeline using current override text.
+- Updates Results, Lineage, Run Log, and Downloads tabs.
+- Shows a completion banner near the run controls:
+  - `Process Completed: <Status>`
+  - `Job ID`
+  - `Output folder`
 
 ## 2) Results Tab
 
@@ -96,11 +125,7 @@ Downloads from the latest run:
 - They do not modify files under `domains/trade/`.
 - If no file is uploaded, UI returns a "No file uploaded" error state.
 
-## Why You See a Generic "Textbox" Label in Column Overrides
+## Completion and Gating Notes
 
-In current UI code, override textbox uses `label=""`.
-Gradio may display a fallback/generic label in this case.
-
-If you want no label shown, set:
-- `show_label=False`
-
+- `Run Pipeline` is disabled until `Analyze Mapping` succeeds.
+- Selecting a new file resets this gate and requires analysis again.
