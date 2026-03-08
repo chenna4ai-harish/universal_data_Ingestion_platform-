@@ -76,7 +76,8 @@ def _normalise_text(text: str, cfg: dict) -> str:
     if cfg.get("text_extraction", {}).get("strip_control_characters", True):
         text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", text)
     if cfg.get("text_extraction", {}).get("collapse_repeated_whitespace", True):
-        text = re.sub(r"[ \t]+", " ", text)
+        # Preserve tabs so delimiter-based parsers (TSV) keep column boundaries.
+        text = re.sub(r" +", " ", text)
     return text
 
 

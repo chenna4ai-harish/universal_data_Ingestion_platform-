@@ -2,3 +2,6 @@
 venv/
 env/
 ENV/
+data/
+Data/
+.data/

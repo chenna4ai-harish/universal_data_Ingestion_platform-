@@ -1,0 +1,2 @@
+Exception_ID,Job_ID,Domain,Source_Filename,Source_Row_Index,Source_Column_Name,Canonical_Table,Canonical_Column,Raw_Value,Exception_Type,Reason,Insert_Timestamp
+5dc4eb39-d582-4d60-9c96-344322f75e8a,aa3be520-5fc2-4ef1-9cae-f437e47ea4ca,trade,trade_contrib_07_docx.docx,,Invoice Date (DD/MM/YYYY),TRD_INVOICE,Invoice_Date,,LOW_CONFIDENCE_MAPPING,Source column 'Invoice Date (DD/MM/YYYY)' mapped to TRD_INVOICE.Invoice_Date with confidence 66 (threshold 80),2026-03-08T12:07:33.652503+00:00

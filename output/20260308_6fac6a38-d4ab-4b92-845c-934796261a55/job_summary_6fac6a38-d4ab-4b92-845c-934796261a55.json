@@ -1,0 +1,21 @@
+{
+  "Job_ID": "6fac6a38-d4ab-4b92-845c-934796261a55",
+  "Domain": "trade",
+  "Source_Filename": "trade_contrib_01_standard.csv",
+  "Job_Status": "SUCCESS_WITH_EXCEPTIONS",
+  "Files_Processed": 1,
+  "Files_Failed": 0,
+  "Total_Source_Rows": 30,
+  "Total_Canonical_Rows_Written": 60,
+  "Total_Exceptions": 7,
+  "Columns_Mapped_Exact": 19,
+  "Columns_Mapped_Fuzzy": 0,
+  "Columns_Mapped_LLM": 0,
+  "Columns_Unmapped": 0,
+  "Mandatory_Columns_Blocked": 0,
+  "Blocked_Mandatory_Details": [],
+  "Job_Start_Timestamp": "2026-03-08T12:16:24.314661+00:00",
+  "Job_End_Timestamp": "2026-03-08T12:16:24.412689+00:00",
+  "Config_Version": "1.2",
+  "Canonical_Model_Version": "1.3"
+}
