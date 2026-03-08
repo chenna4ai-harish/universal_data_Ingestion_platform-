@@ -1,0 +1,21 @@
+{
+  "Job_ID": "206c67c1-0c98-4b1d-81b1-a88fba34d06d",
+  "Domain": "trade",
+  "Source_Filename": "trade_contrib_03_pipe.txt",
+  "Job_Status": "SUCCESS_WITH_EXCEPTIONS",
+  "Files_Processed": 1,
+  "Files_Failed": 0,
+  "Total_Source_Rows": 28,
+  "Total_Canonical_Rows_Written": 56,
+  "Total_Exceptions": 7,
+  "Columns_Mapped_Exact": 19,
+  "Columns_Mapped_Fuzzy": 0,
+  "Columns_Mapped_LLM": 0,
+  "Columns_Unmapped": 0,
+  "Mandatory_Columns_Blocked": 0,
+  "Blocked_Mandatory_Details": [],
+  "Job_Start_Timestamp": "2026-03-08T14:24:12.403683+00:00",
+  "Job_End_Timestamp": "2026-03-08T14:24:12.956937+00:00",
+  "Config_Version": "1.2",
+  "Canonical_Model_Version": "1.3"
+}

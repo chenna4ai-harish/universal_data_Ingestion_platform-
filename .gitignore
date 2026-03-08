@@ -5,3 +5,5 @@ ENV/
 data/
 Data/
 .data/
+.env
+

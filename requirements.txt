@@ -17,7 +17,7 @@ beautifulsoup4>=4.12.0
 html5lib>=1.1
 
 # Encoding detection (optional but improves auto-detect)
-chardet>=5.0.0
+chardet>=5.0.0,<6.0.0
 
 # OCR (optional — only needed for scanned PDF support)
 # pytesseract>=0.3.10
@@ -26,4 +26,4 @@ chardet>=5.0.0
 # LLM integrations (install the one(s) you need)
 anthropic>=0.40.0            # Claude
 openai>=1.0.0                # OpenAI
-google-generativeai>=0.8.0   # Gemini
+google-genai>=1.66.0         # Gemini

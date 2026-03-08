@@ -43,6 +43,16 @@ OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
 DOMAINS = ["trade"]
 LLM_PROVIDERS = ["None", "Claude", "OpenAI", "Gemini"]
 
+# Load canonical table names at startup so the UI can create the right number of tabs/downloads.
+try:
+    _, _startup_canonical_model, _ = load_config(CONFIG_DIR, DOMAINS[0])
+    CANONICAL_TABLE_NAMES: list[str] = [
+        t for t in _startup_canonical_model
+        if not t.startswith("_") and isinstance(_startup_canonical_model[t], dict)
+    ]
+except Exception:
+    CANONICAL_TABLE_NAMES = ["TRD_CUSTOMER", "TRD_INVOICE"]
+
 STATUS_COLORS = {
     "SUCCESS": "SUCCESS",
     "SUCCESS_WITH_EXCEPTIONS": "SUCCESS WITH EXCEPTIONS",
@@ -369,13 +379,14 @@ def analyze_mappings(
 
     rows = []
     source_columns = set()
+    analyze_job_id = f"ANALYZE-{uuid.uuid4()}"
     for pf in parsed_files:
         mapping_results, _ = map_columns(
             source_columns=list(pf.dataframe.columns),
             lookup_table=lookup_table,
             canonical_model=canonical_model,
             cfg=system_cfg,
-            job_id=f"ANALYZE-{uuid.uuid4()}",
+            job_id=analyze_job_id,
             domain=domain,
             source_filename=pf.source_filename,
             user_overrides=user_overrides,
@@ -498,12 +509,16 @@ def run_ingestion(
 
     # Handle Gradio file object
     if uploaded_file is None:
+        _empty = [pd.DataFrame() for _ in CANONICAL_TABLE_NAMES]
+        _no_files = [None for _ in CANONICAL_TABLE_NAMES]
         return (
             "<p style='color:#c0392b'>Process not started. Upload a file first.</p>",
             "<p style='color:red'>No file uploaded.</p>",
-            "No file uploaded.", "", pd.DataFrame(), pd.DataFrame(),
+            "No file uploaded.", "",
+            *_empty,
             pd.DataFrame(), pd.DataFrame(), pd.DataFrame(),
-            None, None, None, None, None,
+            *_no_files,
+            None, None, None,
         )
 
     file_path = uploaded_file if isinstance(uploaded_file, str) else uploaded_file.name
@@ -523,23 +538,25 @@ def run_ingestion(
     except Exception as e:
         import traceback
         err = traceback.format_exc()
+        _empty = [pd.DataFrame() for _ in CANONICAL_TABLE_NAMES]
+        _no_files = [None for _ in CANONICAL_TABLE_NAMES]
         return (
             "<p style='color:#c0392b'>Process failed before completion.</p>",
             f"<p style='color:red'><b>Pipeline error:</b><br><pre>{err}</pre></p>",
             "\n".join(log_lines) + f"\n\nERROR: {err}",
-            "", pd.DataFrame(), pd.DataFrame(),
+            "",
+            *_empty,
             pd.DataFrame(), pd.DataFrame(), pd.DataFrame(),
-            None, None, None, None, None,
+            *_no_files,
+            None, None, None,
         )
 
     dfs = summary.get("_dataframes", {})
     files = summary.get("_output_files", {})
 
-    # Canonical DataFrames (first two tables)
+    # Canonical DataFrames — one per table in CANONICAL_TABLE_NAMES order
     canonical = dfs.get("canonical", {})
-    tbl_names = list(canonical.keys())
-    df_tbl1 = canonical.get(tbl_names[0], pd.DataFrame()) if len(tbl_names) > 0 else pd.DataFrame()
-    df_tbl2 = canonical.get(tbl_names[1], pd.DataFrame()) if len(tbl_names) > 1 else pd.DataFrame()
+    canonical_dfs_out = [canonical.get(tbl, pd.DataFrame()) for tbl in CANONICAL_TABLE_NAMES]
     exceptions_df = dfs.get("exceptions", pd.DataFrame())
     lineage_df = dfs.get("column_lineage", pd.DataFrame())
     archive_df = dfs.get("archive_lineage", pd.DataFrame())
@@ -552,9 +569,8 @@ def run_ingestion(
     log_text = "\n".join(log_lines)
     completion_html = _completion_html(summary)
 
-    # Downloadable files
-    dl_tbl1 = files.get("canonical", {}).get(tbl_names[0]) if tbl_names else None
-    dl_tbl2 = files.get("canonical", {}).get(tbl_names[1]) if len(tbl_names) > 1 else None
+    # Downloadable files — one per table in CANONICAL_TABLE_NAMES order
+    canonical_files_out = [files.get("canonical", {}).get(tbl) for tbl in CANONICAL_TABLE_NAMES]
     dl_exc = files.get("exceptions")
     dl_lineage = files.get("column_lineage")
     dl_dq = files.get("dq_report")
@@ -564,13 +580,11 @@ def run_ingestion(
         status_html,
         log_text,
         dq_html,
-        df_tbl1,
-        df_tbl2,
+        *canonical_dfs_out,
         exceptions_df if not exceptions_df.empty else pd.DataFrame(columns=["No exceptions"]),
         lineage_df,
         archive_df if not archive_df.empty else pd.DataFrame(columns=["No archive (direct upload)"]),
-        dl_tbl1,
-        dl_tbl2,
+        *canonical_files_out,
         dl_exc,
         dl_lineage,
         dl_dq,
@@ -727,18 +741,14 @@ def build_ui() -> gr.Blocks:
                         dq_html = gr.HTML("<p style='color:#888'>-</p>")
 
                 with gr.Tabs():
-                    with gr.Tab("TRD_CUSTOMER"):
-                        df_tbl1 = gr.Dataframe(
-                            label="TRD_CUSTOMER",
-                            interactive=False,
-                            wrap=False,
-                        )
-                    with gr.Tab("TRD_INVOICE"):
-                        df_tbl2 = gr.Dataframe(
-                            label="TRD_INVOICE",
-                            interactive=False,
-                            wrap=False,
-                        )
+                    canonical_df_components: dict[str, gr.Dataframe] = {}
+                    for _tbl in CANONICAL_TABLE_NAMES:
+                        with gr.Tab(_tbl):
+                            canonical_df_components[_tbl] = gr.Dataframe(
+                                label=_tbl,
+                                interactive=False,
+                                wrap=False,
+                            )
                     with gr.Tab("Exceptions"):
                         df_exc = gr.Dataframe(
                             label="RECORD_EXCEPTIONS",
@@ -780,9 +790,10 @@ def build_ui() -> gr.Blocks:
             # ----------------------------------------------------------------
             with gr.Tab("Download Outputs"):
                 gr.Markdown("Output files from the last run. Click to download.")
+                canonical_file_components: dict[str, gr.File] = {}
                 with gr.Row():
-                    dl_tbl1 = gr.File(label="TRD_CUSTOMER CSV")
-                    dl_tbl2 = gr.File(label="TRD_INVOICE CSV")
+                    for _tbl in CANONICAL_TABLE_NAMES:
+                        canonical_file_components[_tbl] = gr.File(label=f"{_tbl} CSV")
                 with gr.Row():
                     dl_exc = gr.File(label="Exceptions CSV")
                     dl_lineage = gr.File(label="Column Lineage CSV")
@@ -879,13 +890,11 @@ def build_ui() -> gr.Blocks:
                 status_html,
                 log_output,
                 dq_html,
-                df_tbl1,
-                df_tbl2,
+                *list(canonical_df_components.values()),
                 df_exc,
                 df_lineage,
                 df_archive,
-                dl_tbl1,
-                dl_tbl2,
+                *list(canonical_file_components.values()),
                 dl_exc,
                 dl_lineage,
                 dl_dq,

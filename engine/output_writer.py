@@ -58,6 +58,11 @@ def write_exceptions(
     filename = f"{prefix}_{job_id}.csv"
     path = os.path.join(output_dir, filename)
     max_rows = cfg.get("output", {}).get("max_exceptions_display", 200)
+    if len(exceptions_df) > max_rows:
+        print(
+            f"  WARNING: exceptions CSV truncated to {max_rows} rows "
+            f"({len(exceptions_df)} total). Increase max_exceptions_display in config to capture all."
+        )
     exceptions_df.head(max_rows).to_csv(path, index=False)
     return path
 

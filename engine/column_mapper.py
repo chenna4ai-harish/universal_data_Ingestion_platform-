@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 import re
 import unicodedata
 import uuid
@@ -283,17 +284,29 @@ def _llm_map_gemini(
 ) -> tuple[str | None, str | None, int, str]:
     model_name = cfg["llm"]["model"]["Gemini"]
     try:
-        import google.generativeai as genai
+        from google import genai
+        from google.genai import types as genai_types
     except ImportError:
-        raise ImportError("google-generativeai not installed; run: pip install google-generativeai")
+        raise ImportError("google-genai not installed; run: pip install google-genai")
 
     options_text = "\n".join(f"  - {tbl}.{col}" for tbl, col in canonical_options)
     prompt = prompt_template.format(
         domain=domain, source_col=source_col,
         options_text=options_text, lookup_context=lookup_context,
     )
-    model = genai.GenerativeModel(model_name)
-    resp = model.generate_content(prompt)
+
+    # google-genai supports either GEMINI_API_KEY or GOOGLE_API_KEY.
+    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    client = genai.Client(api_key=api_key) if api_key else genai.Client()
+    gen_cfg = genai_types.GenerateContentConfig(
+        temperature=cfg["llm"].get("temperature", 0),
+        max_output_tokens=cfg["llm"].get("max_tokens", 1000),
+    )
+    resp = client.models.generate_content(
+        model=model_name,
+        contents=prompt,
+        config=gen_cfg,
+    )
     raw = resp.text.strip()
     raw = re.sub(r"^```json\s*", "", raw)
     raw = re.sub(r"\s*```$", "", raw)
@@ -496,10 +509,6 @@ def map_columns(
             tbl, col = lookup_table[norm]
             is_mandatory = col in mandatory_cols.get(tbl, set())
 
-            # LLM disambiguation if confidence < threshold and LLM enabled
-            if llm_apply_to == "all" and llm_provider != "None":
-                pass  # would re-confirm; skip for exact — exact is always 100
-
             results.append(MappingResult(
                 lineage_id=lineage_id,
                 mapping_reference_id=mapping_reference_id,
@@ -566,8 +575,8 @@ def map_columns(
                             insert_timestamp=ts,
                         ))
                         continue
-                except Exception:
-                    pass  # fall through to fuzzy result
+                except Exception as llm_err:
+                    print(f"  WARNING: LLM disambiguation failed for '{src_col}': {llm_err}")
 
             results.append(MappingResult(
                 lineage_id=lineage_id,
@@ -616,15 +625,11 @@ def map_columns(
                         insert_timestamp=ts,
                     ))
                     continue
-            except Exception:
-                pass
+            except Exception as llm_err:
+                print(f"  WARNING: LLM fallback failed for '{src_col}': {llm_err}")
 
         # --- NO MATCH ---
-        # Check if this normalised name looks like a mandatory column
-        is_mandatory = any(
-            norm in [normalise_column(c, cfg) for c in mandatory_cols.get(tbl, set())]
-            for tbl in mandatory_cols
-        )
+        is_mandatory = False
         results.append(MappingResult(
             lineage_id=lineage_id,
             mapping_reference_id=mapping_reference_id,
