@@ -47,6 +47,13 @@ STATUS_COLORS = {
     "FAILED": "❌ FAILED",
 }
 
+UI_THEME = gr.themes.Soft(primary_hue="blue", neutral_hue="slate")
+UI_CSS = """
+.tab-nav button { font-size: 14px !important; }
+.gr-button-primary { background: #1a5fb4 !important; }
+footer { display: none !important; }
+"""
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -199,7 +206,7 @@ def run_ingestion(
         user_overrides[src.strip()] = (tbl.strip(), col.strip())
 
     # Resolve API key: UI input takes priority, else fall back to env
-    resolved_key = api_key_input.strip() if api_key_input.strip() else ""
+    resolved_key = (api_key_input or "").strip()
 
     llm_override = {
         "provider": llm_provider,
@@ -310,13 +317,7 @@ def on_provider_change(provider: str):
 
 def build_ui() -> gr.Blocks:
     with gr.Blocks(
-        title="Data Ingestion Platform",
-        theme=gr.themes.Soft(primary_hue="blue", neutral_hue="slate"),
-        css="""
-        .tab-nav button { font-size: 14px !important; }
-        .gr-button-primary { background: #1a5fb4 !important; }
-        footer { display: none !important; }
-        """
+        title="Data Ingestion Platform"
     ) as demo:
 
         gr.Markdown(
@@ -532,7 +533,7 @@ def build_ui() -> gr.Blocks:
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--port", type=int, default=7860)
+    parser.add_argument("--port", type=int, default=7861)
     parser.add_argument("--share", action="store_true", help="Create a public Gradio share link")
     parser.add_argument("--no-browser", action="store_true")
     args = parser.parse_args()
@@ -542,4 +543,6 @@ if __name__ == "__main__":
         server_port=args.port,
         share=args.share,
         inbrowser=not args.no_browser,
+        theme=UI_THEME,
+        css=UI_CSS,
     )
