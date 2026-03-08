@@ -5,6 +5,7 @@ env/
 ENV/
 data/
 
+
 # Python cache / build artifacts
 __pycache__/
 *.py[cod]
@@ -23,3 +24,8 @@ __pycache__/
 # Runtime output
 output/
 *.log
+=======
+Data/
+.data/
+.env
+

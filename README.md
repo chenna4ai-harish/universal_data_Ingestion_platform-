@@ -3,6 +3,8 @@
 
 A config-driven pipeline that ingests contributor files in any format, maps columns to a canonical model using exact/fuzzy/LLM matching, runs data quality checks, and produces standardised outputs with full lineage.
 
+Detailed UI field guide: `UI_DOCUMENTATION.md`
+
 ---
 
 ## Table of Contents

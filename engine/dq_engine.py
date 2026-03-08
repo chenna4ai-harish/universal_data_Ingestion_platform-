@@ -60,7 +60,7 @@ def _try_parse_date(val: str) -> tuple[bool, pd.Timestamp | None]:
             continue
     # pandas flexible parse as last resort
     try:
-        return True, pd.to_datetime(s, infer_datetime_format=True)
+        return True, pd.to_datetime(s)
     except Exception:
         return False, None
 
@@ -287,6 +287,14 @@ def _check_referential_integrity(
     return exceptions
 
 
+# Default table per built-in rule_id (can be overridden via rule config's "table" key)
+_RULE_TABLE_DEFAULTS: dict[str, str] = {
+    "INV_DUE_GE_INV_DATE": "TRD_INVOICE",
+    "PAID_LE_INVOICE":      "TRD_INVOICE",
+    "CURRENCY_ISO4217":     "TRD_INVOICE",
+}
+
+
 def _check_business_rules(
     canonical_tables: dict[str, pd.DataFrame],
     cfg: dict,
@@ -294,23 +302,30 @@ def _check_business_rules(
     domain: str,
     source_filename: str,
 ) -> list[dict]:
-    """Evaluate configured business rules."""
+    """Evaluate configured business rules.
+
+    Each rule resolves its target table via:
+      1. rule["table"] key (explicit override in config)
+      2. _RULE_TABLE_DEFAULTS map (built-in fallback)
+    Rules whose target table is not present in this job are silently skipped.
+    """
     rules = cfg.get("quality", {}).get("business_rules", [])
     null_values = cfg.get("quality", {}).get("null_values", [])
     exceptions = []
 
-    inv_df = canonical_tables.get("TRD_INVOICE")
-    if inv_df is None:
-        return []
-
     for rule in rules:
         rule_id = rule["rule_id"]
-        severity = rule.get("severity", "FAIL")
+
+        # Resolve target table — explicit config key wins over built-in default
+        tbl_name = rule.get("table") or _RULE_TABLE_DEFAULTS.get(rule_id, "TRD_INVOICE")
+        tbl_df = canonical_tables.get(tbl_name)
+        if tbl_df is None:
+            continue
 
         if rule_id == "INV_DUE_GE_INV_DATE":
-            if "Due_Date" not in inv_df.columns or "Invoice_Date" not in inv_df.columns:
+            if "Due_Date" not in tbl_df.columns or "Invoice_Date" not in tbl_df.columns:
                 continue
-            for idx, row in inv_df.iterrows():
+            for idx, row in tbl_df.iterrows():
                 due = row.get("Due_Date")
                 inv = row.get("Invoice_Date")
                 if due is None or inv is None:
@@ -321,7 +336,7 @@ def _check_business_rules(
                     if pd.to_datetime(str(due)) < pd.to_datetime(str(inv)):
                         exceptions.append(_make_exception(
                             job_id, domain, source_filename,
-                            int(idx) + 1, "Due_Date", "TRD_INVOICE", "Due_Date",
+                            int(idx) + 1, "Due_Date", tbl_name, "Due_Date",
                             str(due), "BUSINESS_RULE_FAIL",
                             f"[{rule_id}] Due_Date '{due}' is before Invoice_Date '{inv}'",
                         ))
@@ -329,9 +344,9 @@ def _check_business_rules(
                     continue
 
         elif rule_id == "PAID_LE_INVOICE":
-            if "Paid_Amount" not in inv_df.columns or "Invoice_Amount" not in inv_df.columns:
+            if "Paid_Amount" not in tbl_df.columns or "Invoice_Amount" not in tbl_df.columns:
                 continue
-            for idx, row in inv_df.iterrows():
+            for idx, row in tbl_df.iterrows():
                 paid = row.get("Paid_Amount")
                 total = row.get("Invoice_Amount")
                 if paid is None or total is None:
@@ -343,7 +358,7 @@ def _check_business_rules(
                     if paid_f > total_f:
                         exceptions.append(_make_exception(
                             job_id, domain, source_filename,
-                            int(idx) + 1, "Paid_Amount", "TRD_INVOICE", "Paid_Amount",
+                            int(idx) + 1, "Paid_Amount", tbl_name, "Paid_Amount",
                             str(paid), "BUSINESS_RULE_FAIL",
                             f"[{rule_id}] Paid_Amount {paid_f} > Invoice_Amount {total_f}",
                         ))
@@ -369,15 +384,15 @@ def _check_business_rules(
                 "USD","UYU","UZS","VES","VND","VUV","WST","XAF","XCD","XOF",
                 "XPF","YER","ZAR","ZMW","ZWL",
             }
-            if "Currency" not in inv_df.columns:
+            if "Currency" not in tbl_df.columns:
                 continue
-            for idx, val in inv_df["Currency"].items():
+            for idx, val in tbl_df["Currency"].items():
                 if _is_null_value(val, null_values):
                     continue
                 if str(val).upper() not in _ISO4217:
                     exceptions.append(_make_exception(
                         job_id, domain, source_filename,
-                        int(idx) + 1, "Currency", "TRD_INVOICE", "Currency",
+                        int(idx) + 1, "Currency", tbl_name, "Currency",
                         str(val), "BUSINESS_RULE_FAIL",
                         f"[{rule_id}] '{val}' is not a valid ISO 4217 currency code",
                     ))

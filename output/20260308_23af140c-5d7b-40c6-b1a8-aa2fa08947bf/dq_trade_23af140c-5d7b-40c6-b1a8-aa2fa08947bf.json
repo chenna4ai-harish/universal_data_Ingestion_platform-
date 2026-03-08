@@ -1,0 +1,569 @@
+{
+  "job_id": "23af140c-5d7b-40c6-b1a8-aa2fa08947bf",
+  "source_filename": "test_batch.zip",
+  "generated_at": "2026-03-08T12:07:34.242735+00:00",
+  "total_exceptions": 15,
+  "exception_summary": {
+    "MANDATORY_NULL": 14
+  },
+  "tables": {
+    "TRD_CUSTOMER": {
+      "total_rows": 2,
+      "columns": {
+        "Account_Number": {
+          "present": true,
+          "total_rows": 2,
+          "null_count": 0,
+          "fill_rate": 100.0,
+          "mandatory": true,
+          "status": "PASS"
+        },
+        "DUNS_Number": {
+          "present": true,
+          "total_rows": 2,
+          "null_count": 2,
+          "fill_rate": 0.0,
+          "mandatory": false,
+          "status": "FAIL"
+        },
+        "Government_ID": {
+          "present": true,
+          "total_rows": 2,
+          "null_count": 2,
+          "fill_rate": 0.0,
+          "mandatory": false,
+          "status": "FAIL"
+        },
+        "Company_Name": {
+          "present": true,
+          "total_rows": 2,
+          "null_count": 2,
+          "fill_rate": 0.0,
+          "mandatory": true,
+          "status": "FAIL"
+        },
+        "Country_Code": {
+          "present": true,
+          "total_rows": 2,
+          "null_count": 2,
+          "fill_rate": 0.0,
+          "mandatory": false,
+          "status": "FAIL"
+        },
+        "Address_1": {
+          "present": true,
+          "total_rows": 2,
+          "null_count": 2,
+          "fill_rate": 0.0,
+          "mandatory": false,
+          "status": "FAIL"
+        },
+        "Address_2": {
+          "present": true,
+          "total_rows": 2,
+          "null_count": 2,
+          "fill_rate": 0.0,
+          "mandatory": false,
+          "status": "FAIL"
+        },
+        "City": {
+          "present": true,
+          "total_rows": 2,
+          "null_count": 2,
+          "fill_rate": 0.0,
+          "mandatory": false,
+          "status": "FAIL"
+        },
+        "State": {
+          "present": true,
+          "total_rows": 2,
+          "null_count": 2,
+          "fill_rate": 0.0,
+          "mandatory": false,
+          "status": "FAIL"
+        },
+        "Postcode": {
+          "present": true,
+          "total_rows": 2,
+          "null_count": 2,
+          "fill_rate": 0.0,
+          "mandatory": false,
+          "status": "FAIL"
+        }
+      }
+    },
+    "TRD_INVOICE": {
+      "total_rows": 2,
+      "columns": {
+        "Account_Number": {
+          "present": true,
+          "total_rows": 2,
+          "null_count": 0,
+          "fill_rate": 100.0,
+          "mandatory": true,
+          "status": "PASS"
+        },
+        "DOE": {
+          "present": true,
+          "total_rows": 2,
+          "null_count": 0,
+          "fill_rate": 100.0,
+          "mandatory": true,
+          "status": "PASS"
+        },
+        "Invoice_Number": {
+          "present": true,
+          "total_rows": 2,
+          "null_count": 0,
+          "fill_rate": 100.0,
+          "mandatory": true,
+          "status": "PASS"
+        },
+        "Invoice_Date": {
+          "present": true,
+          "total_rows": 2,
+          "null_count": 0,
+          "fill_rate": 100.0,
+          "mandatory": true,
+          "status": "PASS"
+        },
+        "Due_Date": {
+          "present": true,
+          "total_rows": 2,
+          "null_count": 0,
+          "fill_rate": 100.0,
+          "mandatory": true,
+          "status": "PASS"
+        },
+        "Invoice_Amount": {
+          "present": true,
+          "total_rows": 2,
+          "null_count": 0,
+          "fill_rate": 100.0,
+          "mandatory": true,
+          "status": "PASS"
+        },
+        "Paid_Date": {
+          "present": true,
+          "total_rows": 2,
+          "null_count": 2,
+          "fill_rate": 0.0,
+          "mandatory": false,
+          "status": "FAIL"
+        },
+        "Paid_Amount": {
+          "present": true,
+          "total_rows": 2,
+          "null_count": 2,
+          "fill_rate": 0.0,
+          "mandatory": false,
+          "status": "FAIL"
+        },
+        "Payment_Terms": {
+          "present": true,
+          "total_rows": 2,
+          "null_count": 0,
+          "fill_rate": 100.0,
+          "mandatory": true,
+          "status": "PASS"
+        },
+        "Invoice_Type": {
+          "present": true,
+          "total_rows": 2,
+          "null_count": 2,
+          "fill_rate": 0.0,
+          "mandatory": false,
+          "status": "FAIL"
+        },
+        "Currency": {
+          "present": true,
+          "total_rows": 2,
+          "null_count": 2,
+          "fill_rate": 0.0,
+          "mandatory": false,
+          "status": "FAIL"
+        }
+      }
+    }
+  },
+  "per_file_reports": [
+    {
+      "job_id": "23af140c-5d7b-40c6-b1a8-aa2fa08947bf",
+      "source_filename": "customers.csv",
+      "generated_at": "2026-03-08T12:07:34.211684+00:00",
+      "total_exceptions": 12,
+      "exception_summary": {
+        "MANDATORY_NULL": 12
+      },
+      "tables": {
+        "TRD_CUSTOMER": {
+          "total_rows": 2,
+          "columns": {
+            "Account_Number": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 0,
+              "fill_rate": 100.0,
+              "mandatory": true,
+              "status": "PASS"
+            },
+            "DUNS_Number": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 2,
+              "fill_rate": 0.0,
+              "mandatory": false,
+              "status": "FAIL"
+            },
+            "Government_ID": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 2,
+              "fill_rate": 0.0,
+              "mandatory": false,
+              "status": "FAIL"
+            },
+            "Company_Name": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 0,
+              "fill_rate": 100.0,
+              "mandatory": true,
+              "status": "PASS"
+            },
+            "Country_Code": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 0,
+              "fill_rate": 100.0,
+              "mandatory": false,
+              "status": "PASS"
+            },
+            "Address_1": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 2,
+              "fill_rate": 0.0,
+              "mandatory": false,
+              "status": "FAIL"
+            },
+            "Address_2": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 2,
+              "fill_rate": 0.0,
+              "mandatory": false,
+              "status": "FAIL"
+            },
+            "City": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 2,
+              "fill_rate": 0.0,
+              "mandatory": false,
+              "status": "FAIL"
+            },
+            "State": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 2,
+              "fill_rate": 0.0,
+              "mandatory": false,
+              "status": "FAIL"
+            },
+            "Postcode": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 2,
+              "fill_rate": 0.0,
+              "mandatory": false,
+              "status": "FAIL"
+            }
+          }
+        },
+        "TRD_INVOICE": {
+          "total_rows": 2,
+          "columns": {
+            "Account_Number": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 0,
+              "fill_rate": 100.0,
+              "mandatory": true,
+              "status": "PASS"
+            },
+            "DOE": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 2,
+              "fill_rate": 0.0,
+              "mandatory": true,
+              "status": "FAIL"
+            },
+            "Invoice_Number": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 2,
+              "fill_rate": 0.0,
+              "mandatory": true,
+              "status": "FAIL"
+            },
+            "Invoice_Date": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 2,
+              "fill_rate": 0.0,
+              "mandatory": true,
+              "status": "FAIL"
+            },
+            "Due_Date": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 2,
+              "fill_rate": 0.0,
+              "mandatory": true,
+              "status": "FAIL"
+            },
+            "Invoice_Amount": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 2,
+              "fill_rate": 0.0,
+              "mandatory": true,
+              "status": "FAIL"
+            },
+            "Paid_Date": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 2,
+              "fill_rate": 0.0,
+              "mandatory": false,
+              "status": "FAIL"
+            },
+            "Paid_Amount": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 2,
+              "fill_rate": 0.0,
+              "mandatory": false,
+              "status": "FAIL"
+            },
+            "Payment_Terms": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 2,
+              "fill_rate": 0.0,
+              "mandatory": true,
+              "status": "FAIL"
+            },
+            "Invoice_Type": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 2,
+              "fill_rate": 0.0,
+              "mandatory": false,
+              "status": "FAIL"
+            },
+            "Currency": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 2,
+              "fill_rate": 0.0,
+              "mandatory": false,
+              "status": "FAIL"
+            }
+          }
+        }
+      }
+    },
+    {
+      "job_id": "23af140c-5d7b-40c6-b1a8-aa2fa08947bf",
+      "source_filename": "invoices.csv",
+      "generated_at": "2026-03-08T12:07:34.232449+00:00",
+      "total_exceptions": 2,
+      "exception_summary": {
+        "MANDATORY_NULL": 2
+      },
+      "tables": {
+        "TRD_CUSTOMER": {
+          "total_rows": 2,
+          "columns": {
+            "Account_Number": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 0,
+              "fill_rate": 100.0,
+              "mandatory": true,
+              "status": "PASS"
+            },
+            "DUNS_Number": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 2,
+              "fill_rate": 0.0,
+              "mandatory": false,
+              "status": "FAIL"
+            },
+            "Government_ID": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 2,
+              "fill_rate": 0.0,
+              "mandatory": false,
+              "status": "FAIL"
+            },
+            "Company_Name": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 2,
+              "fill_rate": 0.0,
+              "mandatory": true,
+              "status": "FAIL"
+            },
+            "Country_Code": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 2,
+              "fill_rate": 0.0,
+              "mandatory": false,
+              "status": "FAIL"
+            },
+            "Address_1": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 2,
+              "fill_rate": 0.0,
+              "mandatory": false,
+              "status": "FAIL"
+            },
+            "Address_2": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 2,
+              "fill_rate": 0.0,
+              "mandatory": false,
+              "status": "FAIL"
+            },
+            "City": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 2,
+              "fill_rate": 0.0,
+              "mandatory": false,
+              "status": "FAIL"
+            },
+            "State": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 2,
+              "fill_rate": 0.0,
+              "mandatory": false,
+              "status": "FAIL"
+            },
+            "Postcode": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 2,
+              "fill_rate": 0.0,
+              "mandatory": false,
+              "status": "FAIL"
+            }
+          }
+        },
+        "TRD_INVOICE": {
+          "total_rows": 2,
+          "columns": {
+            "Account_Number": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 0,
+              "fill_rate": 100.0,
+              "mandatory": true,
+              "status": "PASS"
+            },
+            "DOE": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 0,
+              "fill_rate": 100.0,
+              "mandatory": true,
+              "status": "PASS"
+            },
+            "Invoice_Number": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 0,
+              "fill_rate": 100.0,
+              "mandatory": true,
+              "status": "PASS"
+            },
+            "Invoice_Date": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 0,
+              "fill_rate": 100.0,
+              "mandatory": true,
+              "status": "PASS"
+            },
+            "Due_Date": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 0,
+              "fill_rate": 100.0,
+              "mandatory": true,
+              "status": "PASS"
+            },
+            "Invoice_Amount": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 0,
+              "fill_rate": 100.0,
+              "mandatory": true,
+              "status": "PASS"
+            },
+            "Paid_Date": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 2,
+              "fill_rate": 0.0,
+              "mandatory": false,
+              "status": "FAIL"
+            },
+            "Paid_Amount": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 2,
+              "fill_rate": 0.0,
+              "mandatory": false,
+              "status": "FAIL"
+            },
+            "Payment_Terms": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 0,
+              "fill_rate": 100.0,
+              "mandatory": true,
+              "status": "PASS"
+            },
+            "Invoice_Type": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 2,
+              "fill_rate": 0.0,
+              "mandatory": false,
+              "status": "FAIL"
+            },
+            "Currency": {
+              "present": true,
+              "total_rows": 2,
+              "null_count": 2,
+              "fill_rate": 0.0,
+              "mandatory": false,
+              "status": "FAIL"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

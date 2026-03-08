@@ -7,6 +7,7 @@ and merges DQ exceptions into the RECORD_EXCEPTIONS DataFrame.
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import asdict
 from datetime import datetime, timezone
 
@@ -143,7 +144,7 @@ def build_mapping_exceptions(
     for r in mapping_results:
         if r.canonical_column == "UNMAPPED" and r.was_mandatory:
             exceptions.append({
-                "Exception_ID": __import__("uuid").uuid4().__str__(),
+                "Exception_ID": str(uuid.uuid4()),
                 "Job_ID": job_id,
                 "Domain": domain,
                 "Source_Filename": source_filename,
@@ -162,7 +163,7 @@ def build_mapping_exceptions(
         elif (r.canonical_column != "UNMAPPED" and r.was_mandatory
               and r.confidence_score < mandatory_threshold):
             exceptions.append({
-                "Exception_ID": __import__("uuid").uuid4().__str__(),
+                "Exception_ID": str(uuid.uuid4()),
                 "Job_ID": job_id,
                 "Domain": domain,
                 "Source_Filename": source_filename,
@@ -193,7 +194,7 @@ def build_failed_file_exceptions(
     rows = []
     for ff in failed_files:
         rows.append({
-            "Exception_ID": __import__("uuid").uuid4().__str__(),
+            "Exception_ID": str(uuid.uuid4()),
             "Job_ID": job_id,
             "Domain": domain,
             "Source_Filename": ff.source_filename,
