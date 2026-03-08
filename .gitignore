@@ -2,3 +2,5 @@
 venv/
 env/
 ENV/
+output/
+data/

@@ -21,6 +21,9 @@ A config-driven pipeline that ingests contributor files in any format, maps colu
 
 ---
 
+For a focused explanation of mapping logic and confidence scoring, see:
+- `UI_DOCUMENTATION.md` (Column Mapper: Exact -> Fuzzy -> LLM -> Override -> Propagation)
+
 ## 1. Project Structure
 
 ```
