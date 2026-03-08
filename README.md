@@ -23,6 +23,9 @@ Detailed UI field guide: `UI_DOCUMENTATION.md`
 
 ---
 
+For a focused explanation of mapping logic and confidence scoring, see:
+- `UI_DOCUMENTATION.md` (Column Mapper: Exact -> Fuzzy -> LLM -> Override -> Propagation)
+
 ## 1. Project Structure
 
 ```
