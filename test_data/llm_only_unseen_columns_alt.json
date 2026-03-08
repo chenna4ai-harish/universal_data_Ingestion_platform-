@@ -1,0 +1,67 @@
+﻿[
+  {
+    "Debtor Portfolio Key": "DPK-8101",
+    "Buyer Legal Entity Name": "Meridian Industrial Parts",
+    "AsOf Snapshot Marker": "2025-08-31",
+    "Supplier Billing Document ID": "SBD-2025-1001",
+    "Document Emission Calendar": "2025-08-01",
+    "Contract Payment Deadline": "2025-08-31",
+    "Original Gross Receivable Amount": "11250.35",
+    "Commercial Settlement Terms": "Net 30",
+    "Invoice Currency ISO Code": "USD",
+    "Cash Application Date": "2025-08-25",
+    "Cash Application Amount": "11250.35"
+  },
+  {
+    "Debtor Portfolio Key": "DPK-8102",
+    "Buyer Legal Entity Name": "Nova Fabrication Systems",
+    "AsOf Snapshot Marker": "2025-08-31",
+    "Supplier Billing Document ID": "SBD-2025-1002",
+    "Document Emission Calendar": "2025-08-03",
+    "Contract Payment Deadline": "2025-09-02",
+    "Original Gross Receivable Amount": "8450.00",
+    "Commercial Settlement Terms": "Net 30",
+    "Invoice Currency ISO Code": "EUR",
+    "Cash Application Date": "2025-08-30",
+    "Cash Application Amount": "8450.00"
+  },
+  {
+    "Debtor Portfolio Key": "DPK-8103",
+    "Buyer Legal Entity Name": "Apex Allied Components",
+    "AsOf Snapshot Marker": "2025-08-31",
+    "Supplier Billing Document ID": "SBD-2025-1003",
+    "Document Emission Calendar": "2025-08-07",
+    "Contract Payment Deadline": "2025-09-06",
+    "Original Gross Receivable Amount": "15990.90",
+    "Commercial Settlement Terms": "Net 30",
+    "Invoice Currency ISO Code": "GBP",
+    "Cash Application Date": "",
+    "Cash Application Amount": ""
+  },
+  {
+    "Debtor Portfolio Key": "DPK-8104",
+    "Buyer Legal Entity Name": "Harbor Machine Works",
+    "AsOf Snapshot Marker": "2025-08-31",
+    "Supplier Billing Document ID": "SBD-2025-1004",
+    "Document Emission Calendar": "2025-08-09",
+    "Contract Payment Deadline": "2025-09-08",
+    "Original Gross Receivable Amount": "6320.55",
+    "Commercial Settlement Terms": "Net 30",
+    "Invoice Currency ISO Code": "CAD",
+    "Cash Application Date": "2025-09-05",
+    "Cash Application Amount": "6320.55"
+  },
+  {
+    "Debtor Portfolio Key": "DPK-8105",
+    "Buyer Legal Entity Name": "Summit Distribution Group",
+    "AsOf Snapshot Marker": "2025-08-31",
+    "Supplier Billing Document ID": "SBD-2025-1005",
+    "Document Emission Calendar": "2025-08-11",
+    "Contract Payment Deadline": "2025-09-10",
+    "Original Gross Receivable Amount": "20110.00",
+    "Commercial Settlement Terms": "Net 30",
+    "Invoice Currency ISO Code": "USD",
+    "Cash Application Date": "2025-09-09",
+    "Cash Application Amount": "20110.00"
+  }
+]

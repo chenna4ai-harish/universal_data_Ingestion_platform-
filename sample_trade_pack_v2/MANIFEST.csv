@@ -1,0 +1,11 @@
+file_name,file_type,records,notes
+trade_contrib_01_standard.csv,"delimited (',')",30,Contains variant headers + injected DQ edge cases
+trade_contrib_02_tsv.tsv,delimited ('\t'),32,Contains variant headers + injected DQ edge cases
+trade_contrib_03_pipe.txt,delimited ('|'),28,Contains variant headers + injected DQ edge cases
+trade_contrib_04_semicolon.csv,delimited (';'),40,Contains variant headers + injected DQ edge cases
+trade_contrib_05_json.json,json,25,Contains variant headers + injected DQ edge cases
+trade_contrib_06_xml.xml,xml,26,Contains variant headers + injected DQ edge cases
+trade_contrib_07_docx.docx,docx,35,Contains variant headers + injected DQ edge cases
+trade_contrib_08_text_cp1252.txt,delimited ('\t'),27,Contains variant headers + injected DQ edge cases
+trade_contrib_09_html.html,html,29,Contains variant headers + injected DQ edge cases
+trade_contrib_10_nested_zip.zip,zip (nested zip inside),25+26+25 internal,Nested archive with csv/json/xml payloads for archive ingestion tests

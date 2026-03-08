@@ -144,7 +144,7 @@ def _build_canonical_tables(
         business_cols = list(tdef.get("business_columns", {}).keys())
 
         rows = []
-        for _, src_row in df.iterrows():
+        for row_idx, src_row in df.iterrows():
             record = {}
             for can_col in business_cols:
                 src_col = col_map.get(can_col)
@@ -152,7 +152,7 @@ def _build_canonical_tables(
 
             # Lineage columns
             record["Source_Filename"] = source_filename
-            record["Source_Row_Index"] = _ + 1   # 1-based
+            record["Source_Row_Index"] = row_idx + 1   # 1-based
             record["Source_Contributor_ID"] = source_contributor_id
             record["Source_File_Format"] = source_file_format
             record["Mapping_Reference_ID"] = mapping_reference_id
@@ -169,7 +169,6 @@ def _build_canonical_tables(
             rows.append(record)
 
         canonical_tables[tbl] = pd.DataFrame(rows)
-        source_col_maps[tbl] = {v: k for k, v in col_map.items()}   # source_col -> canonical_col (inverted for DQ)
         # DQ engine expects canonical_col -> source_col
         source_col_maps[tbl] = col_map
 
@@ -302,8 +301,8 @@ def run_pipeline(
     output_dir = os.path.join(output_dir, f"{job_date_str}_{job_id}")
     Path(output_dir).mkdir(parents=True, exist_ok=True)
 
-    print(f"\n{'='*60}")
-    print(f"Job ID  : {job_id}")
+    _log(f"\n{'='*60}")
+    _log(f"Job ID  : {job_id}")
     _log(f"Domain  : {domain}")
     _log(f"File    : {file_path}")
     _log(f"Started : {job_start.isoformat()}")
@@ -447,11 +446,50 @@ def run_pipeline(
         "tables": {},
         "per_file_reports": all_dq_reports,
     }
+    pass_fill = system_cfg.get("quality", {}).get("dq_pass_fill_rate", 95)
+    warn_fill = system_cfg.get("quality", {}).get("dq_warn_fill_rate", 70)
+
     for report in all_dq_reports:
         for k, v in report.get("exception_summary", {}).items():
             merged_dq["exception_summary"][k] = merged_dq["exception_summary"].get(k, 0) + v
+
         for tbl, tdata in report.get("tables", {}).items():
-            merged_dq["tables"][tbl] = tdata   # last file wins for per-table; good enough for POC
+            if tbl not in merged_dq["tables"]:
+                merged_dq["tables"][tbl] = tdata
+                continue
+
+            # Accumulate per-table stats across files instead of last-file-wins
+            existing = merged_dq["tables"][tbl]
+            combined_rows = existing["total_rows"] + tdata["total_rows"]
+            merged_cols: dict = {}
+            all_cols = set(existing.get("columns", {})) | set(tdata.get("columns", {}))
+
+            for col in all_cols:
+                e_col = existing.get("columns", {}).get(col)
+                t_col = tdata.get("columns", {}).get(col)
+
+                if e_col is None:
+                    merged_cols[col] = t_col
+                elif t_col is None:
+                    merged_cols[col] = e_col
+                elif not e_col.get("present") and not t_col.get("present"):
+                    merged_cols[col] = {"present": False, "fill_rate": 0.0, "status": "MISSING"}
+                else:
+                    e_null = e_col.get("null_count", round((1 - e_col.get("fill_rate", 0) / 100) * existing["total_rows"]))
+                    t_null = t_col.get("null_count", round((1 - t_col.get("fill_rate", 0) / 100) * tdata["total_rows"]))
+                    combined_null = e_null + t_null
+                    fill_rate = round((combined_rows - combined_null) / combined_rows * 100, 1) if combined_rows > 0 else 0.0
+                    status = "PASS" if fill_rate >= pass_fill else ("WARN" if fill_rate >= warn_fill else "FAIL")
+                    merged_cols[col] = {
+                        "present": True,
+                        "total_rows": combined_rows,
+                        "null_count": combined_null,
+                        "fill_rate": fill_rate,
+                        "mandatory": e_col.get("mandatory", t_col.get("mandatory", False)),
+                        "status": status,
+                    }
+
+            merged_dq["tables"][tbl] = {"total_rows": combined_rows, "columns": merged_cols}
 
     # --- Determine job status ---
     has_blocked = bool(blocked_mandatory_all)

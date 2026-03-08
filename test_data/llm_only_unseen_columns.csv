@@ -1,0 +1,6 @@
+﻿Client Ledger Handle,Legal Trading Title,Snapshot AsAt,Billing Artifact ID,Issued On Calendar,Pay-By Calendar,Gross Obligation Value,Contractual Settlement Rule,Settlement CCY Alpha,Settlement Cleared On,Settlement Cleared Value
+CLH-9001,Northwind Components Ltd,2025-07-31,BLT-2025-0001,2025-07-01,2025-07-31,12500.75,Net 30,USD,2025-07-25,12500.75
+CLH-9002,Orchid Industrial Supply,2025-07-31,BLT-2025-0002,2025-07-03,2025-08-02,9800.00,Net 30,EUR,2025-07-30,9800.00
+CLH-9003,Atlas Fabrication Works,2025-07-31,BLT-2025-0003,2025-07-08,2025-08-07,15320.40,Net 30,GBP,,
+CLH-9004,Beacon Distribution Group,2025-07-31,BLT-2025-0004,2025-07-10,2025-08-09,7650.10,Net 30,USD,2025-08-08,7650.10
+CLH-9005,Terra Allied Manufacturing,2025-07-31,BLT-2025-0005,2025-07-12,2025-08-11,20450.00,Net 30,CAD,2025-08-10,20450.00
