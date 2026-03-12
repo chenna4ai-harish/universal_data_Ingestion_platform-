@@ -7,10 +7,11 @@ This document explains the Column Mapper matching method shown in the UI:
 ## 1) Where this runs in UI
 
 In `Upload & Run` tab:
-1. Click `1) Analyze Mapping`
-2. Review scorecard (`Source_Column`, `Suggested_Target`, `Match_Method`, `Confidence_Score`)
-3. Optionally apply override via dropdown/text
-4. Click `2) Run Pipeline`
+1. Select **one or more files** in the file picker (multi-file supported)
+2. Click `1) Analyze Mapping` — parses all files and builds a combined scorecard with a `Source_File` column identifying which file each row comes from
+3. Review scorecard (`Source_File`, `Source_Column`, `Suggested_Target`, `Match_Method`, `Confidence_Score`)
+4. Optionally apply overrides via dropdown or text box (overrides apply to all files in the batch by source column name)
+5. Click `2) Run Pipeline` — processes all files sequentially under one shared `Job_ID`
 
 The same mapping engine is used in both Analyze and Run steps.
 
@@ -110,9 +111,15 @@ Mandatory canonical columns are checked against `mandatory_threshold` (default `
 - if mandatory mapping is missing or below threshold, it is treated as blocked
 - pipeline may return `BLOCKED` when auto-block is enabled
 
-Important behavior:
+Important behaviour (single file):
 - mandatory checks are enforced only for tables actively targeted by the file
 - propagation-only presence does not by itself make a table active
+
+Important behaviour (multi-file batch):
+- blocking is evaluated **per file** — one blocked file does not prevent other files from producing output
+- `Job_Status = BLOCKED` only when **all** files in the batch are blocked
+- if some files are blocked and others succeed → `Job_Status = SUCCESS_WITH_EXCEPTIONS`
+- the Run Log shows `X/N files blocked` so you can identify which files need override attention
 
 ## 5) How to read scorecard fields
 
@@ -131,4 +138,12 @@ To test fuzzy-heavy behavior:
 - use near-match column names (typos, suffix/prefix variants)
 - keep a few exact names as controls (expect confidence `100`)
 - expect most near-match columns to map around `80-87` with current defaults
+
+## 7) Multi-file scorecard behaviour
+
+When multiple files are uploaded:
+- `Source_File` column in the scorecard identifies which uploaded file each mapping row belongs to
+- the same source column name appearing in two files produces **two separate scorecard rows** (one per file)
+- overrides are matched on `Source_Column` name — if the same column name appears in multiple files, the override applies to all occurrences
+- `Files: N` in the analysis message shows how many parsed sub-files were mapped (includes sub-files extracted from ZIPs)
 

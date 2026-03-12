@@ -270,7 +270,7 @@ def _process_parsed_file(
 # ---------------------------------------------------------------------------
 
 def run_pipeline(
-    file_path: str,
+    file_paths: list[str] | str | None = None,
     domain: str = "trade",
     config_dir: str = ".",
     output_dir: str = "./output",
@@ -279,14 +279,26 @@ def run_pipeline(
     preview: bool = False,
     llm_override: dict | None = None,
     log_fn=None,
+    # backward-compat alias
+    file_path: str | None = None,
 ) -> dict:
     """
     Full pipeline run. Returns job summary dict.
 
+    file_paths: one or more input file paths (list or single string).
+    file_path:  backward-compat alias for a single file path.
     llm_override: optional dict to override LLM config at runtime, e.g.
         {"provider": "Claude", "api_key": "sk-ant-..."}
     log_fn: optional callable(str) for streaming log lines to a UI.
     """
+    # Backward compat: accept old file_path kwarg or single string
+    if file_paths is None:
+        file_paths = file_path
+    if isinstance(file_paths, str):
+        file_paths = [file_paths]
+    if not file_paths:
+        raise ValueError("run_pipeline() requires at least one file path via file_paths or file_path")
+
     def _log(msg: str) -> None:
         print(msg)
         if log_fn:
@@ -304,7 +316,7 @@ def run_pipeline(
     _log(f"\n{'='*60}")
     _log(f"Job ID  : {job_id}")
     _log(f"Domain  : {domain}")
-    _log(f"File    : {file_path}")
+    _log(f"Files   : {', '.join(os.path.basename(fp) for fp in file_paths)}")
     _log(f"Started : {job_start.isoformat()}")
     _log(f"Output  : {output_dir}")
     _log(f"{'='*60}\n")
@@ -354,19 +366,33 @@ def run_pipeline(
          f"Lookup entries: {len(lookup_table)}, "
          f"LLM: {system_cfg.get('llm', {}).get('provider', 'None')}")
 
-    # --- Parse input file ---
-    _log(f"\nParsing input file...")
-    parsed_files, failed_files, archive_lineage_rows = parse_input_file(
-        file_path=file_path,
-        cfg=system_cfg,
-        job_id=job_id,
-    )
+    # --- Parse all uploaded files ---
+    all_parsed_files = []
+    all_failed_files_raw = []
+    archive_lineage_rows = []
 
-    _log(f"  Parsed files: {len(parsed_files)}")
-    _log(f"  Failed files: {len(failed_files)}")
+    for fp in file_paths:
+        _log(f"\nParsing input file: '{fp}'...")
+        parsed, failed, arch_rows = parse_input_file(
+            file_path=fp,
+            cfg=system_cfg,
+            job_id=job_id,
+        )
+        all_parsed_files.extend(parsed)
+        all_failed_files_raw.extend(failed)
+        archive_lineage_rows.extend(arch_rows)
+        _log(f"  Parsed: {len(parsed)}, Failed: {len(failed)}")
+
+    parsed_files = all_parsed_files
+    failed_files = all_failed_files_raw
+
+    _log(f"\n  Total parsed files: {len(parsed_files)}")
+    _log(f"  Total failed files: {len(failed_files)}")
     if failed_files:
         for ff in failed_files:
             _log(f"  FAIL [{ff.exception_type}] {ff.source_filename}: {ff.reason}")
+
+    source_filename_str = ", ".join(os.path.basename(fp) for fp in file_paths)
 
     if not parsed_files:
         _log("\nNo files could be parsed. Job FAILED.")
@@ -377,7 +403,7 @@ def run_pipeline(
         arch_path = write_archive_lineage(arch_df, output_dir, job_id)
         summary = build_job_summary(
             job_id=job_id, domain=domain,
-            source_filename=os.path.basename(file_path),
+            source_filename=source_filename_str,
             job_status="FAILED",
             files_processed=0, files_failed=len(failed_files),
             total_source_rows=0, total_canonical_rows=0,
@@ -396,6 +422,7 @@ def run_pipeline(
     merged_canonical: dict[str, list[pd.DataFrame]] = {}
     total_source_rows = 0
     blocked_mandatory_all = []
+    blocked_files_count = 0  # for per-file BLOCKED logic (spec §7.6)
 
     # File-level failures -> exceptions
     failed_excs = build_failed_file_exceptions(failed_files, job_id, domain)
@@ -413,7 +440,9 @@ def run_pipeline(
 
         all_mapping_results.extend(mapping_results)
         all_exceptions.extend(file_excs)
-        blocked_mandatory_all.extend(blocked)
+        if blocked:
+            blocked_mandatory_all.extend(blocked)
+            blocked_files_count += 1
 
         if dq_report:
             all_dq_reports.append(dq_report)
@@ -439,7 +468,7 @@ def run_pipeline(
     # --- Merge DQ reports ---
     merged_dq = {
         "job_id": job_id,
-        "source_filename": os.path.basename(file_path),
+        "source_filename": source_filename_str,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "total_exceptions": len(all_exceptions),
         "exception_summary": {},
@@ -492,11 +521,13 @@ def run_pipeline(
             merged_dq["tables"][tbl] = {"total_rows": combined_rows, "columns": merged_cols}
 
     # --- Determine job status ---
-    has_blocked = bool(blocked_mandatory_all)
+    # Per spec §7.6: BLOCKED only if ALL parsed files were blocked
+    all_files_blocked = blocked_files_count > 0 and blocked_files_count == len(parsed_files)
     has_exceptions = len(all_exceptions) > 0
-    if has_blocked:
+    if all_files_blocked:
         job_status = "BLOCKED"
-    elif has_exceptions:
+    elif has_exceptions or blocked_files_count > 0:
+        # Some files blocked but not all, or there are DQ/mapping exceptions
         job_status = "SUCCESS_WITH_EXCEPTIONS"
     else:
         job_status = "SUCCESS"
@@ -512,7 +543,7 @@ def run_pipeline(
     summary = build_job_summary(
         job_id=job_id,
         domain=domain,
-        source_filename=os.path.basename(file_path),
+        source_filename=source_filename_str,
         job_status=job_status,
         files_processed=len(parsed_files),
         files_failed=len(failed_files),
@@ -538,7 +569,8 @@ def run_pipeline(
          f"{summary['Columns_Mapped_LLM']} LLM, "
          f"{summary['Columns_Unmapped']} unmapped")
     if blocked_mandatory_all:
-        _log(f"BLOCKED     : {len(blocked_mandatory_all)} mandatory columns unresolved")
+        _log(f"BLOCKED     : {blocked_files_count}/{len(parsed_files)} files blocked, "
+             f"{len(blocked_mandatory_all)} mandatory columns unresolved")
     print(f"\nOutputs:")
     for tbl, path in canonical_paths.items():
         print(f"  [{tbl}] {path}")
@@ -608,7 +640,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Universal Data Ingestion and Normalisation Pipeline"
     )
-    parser.add_argument("file", help="Input file path (CSV, XLSX, JSON, XML, ZIP, etc.)")
+    parser.add_argument("files", nargs="+", help="One or more input file paths (CSV, XLSX, JSON, XML, ZIP, etc.)")
     parser.add_argument("--domain", default="trade", help="Domain key (default: trade)")
     parser.add_argument("--config-dir", default=".", help="Directory with config files (default: .)")
     parser.add_argument("--output-dir", default="./output", help="Output directory (default: ./output)")
@@ -618,14 +650,15 @@ def main() -> None:
     parser.add_argument("--preview", action="store_true", help="Print output preview to console")
     args = parser.parse_args()
 
-    if not os.path.exists(args.file):
-        print(f"ERROR: File not found: {args.file}")
-        sys.exit(1)
+    for f in args.files:
+        if not os.path.exists(f):
+            print(f"ERROR: File not found: {f}")
+            sys.exit(1)
 
     overrides = _parse_overrides(args.override or [])
 
     summary = run_pipeline(
-        file_path=args.file,
+        file_paths=args.files,
         domain=args.domain,
         config_dir=args.config_dir,
         output_dir=args.output_dir,
