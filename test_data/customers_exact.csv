@@ -1,0 +1,9 @@
+account_number,company_name,duns_number,tax_id,country_code,address_1,address_2,city,state,postcode
+CUST-001,Acme Corporation,123456789,US12345678,US,100 Main Street,Suite 400,New York,NY,10001
+CUST-002,Beta Supplies Ltd,234567890,GB87654321,GB,22 Baker Street,,London,England,W1U 3BX
+CUST-003,Gamma Trading GmbH,345678901,DE99887766,DE,Hauptstraße 5,Etage 3,Berlin,Berlin,10115
+CUST-004,Delta Imports Inc,456789012,US55443322,US,500 Oak Avenue,,Chicago,IL,60601
+CUST-005,Epsilon Partners,567890123,,AU,Level 8 200 George St,,Sydney,NSW,2000
+CUST-006,Zeta Wholesale Co,678901234,CA11223344,CA,1 King Street West,Floor 12,Toronto,Ontario,M5H 1A1
+CUST-007,Eta Distributors,789012345,,SG,10 Raffles Place,,Singapore,,048583
+CUST-008,Theta Retail Ltd,890123456,ZA44556677,ZA,45 Commissioner Street,,Johannesburg,Gauteng,2001
