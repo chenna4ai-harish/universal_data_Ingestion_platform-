@@ -1,5 +1,5 @@
 # Universal Data Ingestion & Normalisation Platform
-**Version:** POC 1.0 | **Domain:** Trade Credit Payments
+**Version:** POC 1.1 | **Domain:** Trade Credit Payments
 
 A config-driven pipeline that ingests contributor files in any format, maps columns to a canonical model using exact/fuzzy/LLM matching, runs data quality checks, and produces standardised outputs with full lineage.
 
@@ -12,12 +12,13 @@ A config-driven pipeline that ingests contributor files in any format, maps colu
 4. [Setup](#4-setup)
 5. [Running the UI (Gradio)](#5-running-the-ui-gradio)
 6. [Running via CLI](#6-running-via-cli)
-7. [LLM Configuration](#7-llm-configuration)
-8. [Config Files Reference](#8-config-files-reference)
-9. [Output Files Reference](#9-output-files-reference)
-10. [Testing with Sample Files](#10-testing-with-sample-files)
-11. [Adding a New Domain](#11-adding-a-new-domain)
-12. [Troubleshooting](#12-troubleshooting)
+7. [Multi-File Batch Ingestion](#7-multi-file-batch-ingestion)
+8. [LLM Configuration](#8-llm-configuration)
+9. [Config Files Reference](#9-config-files-reference)
+10. [Output Files Reference](#10-output-files-reference)
+11. [Testing with Sample Files](#11-testing-with-sample-files)
+12. [Adding a New Domain](#12-adding-a-new-domain)
+13. [Troubleshooting](#13-troubleshooting)
 
 ---
 
@@ -62,9 +63,9 @@ Data_Ingestion/
 ## 2. Architecture Overview
 
 ```
-Uploaded File
+Uploaded File(s)  ← 1 to N files in a single interaction
       │
-      ▼
+      ▼  (outer loop — one parse call per uploaded file)
 ┌─────────────────┐
 │   file_parser   │  Detects file type, unpacks ZIPs (nested),
 │                 │  decodes encoding, parses to DataFrame
@@ -96,6 +97,7 @@ Uploaded File
          ▼
   canonical CSVs  +  exceptions CSV  +  column lineage CSV
   archive lineage CSV  +  DQ report JSON  +  job summary JSON
+          (all files share one Job_ID — unified lineage)
 ```
 
 **Design principle:** The engine has zero domain-specific logic. All trade behaviour lives in the three config files. To add a new domain, create three new config files — no code changes.
@@ -104,12 +106,12 @@ Uploaded File
 
 ## 3. End-to-End Flow
 
-Each pipeline run executes these 15 steps:
+Each pipeline run executes these steps (for each uploaded file in batch order):
 
 | Step | What happens |
 |------|-------------|
-| 1 | Receive uploaded file path |
-| 2 | Detect if direct file or ZIP archive |
+| 1 | Receive one or more uploaded file paths; generate a single `Job_ID` for the batch |
+| 2 | For each file: detect if direct file or ZIP archive |
 | 3 | If ZIP: recursively unpack per safety policy (depth, size, extension, zip-slip) |
 | 4 | Validate each entry: extension + MIME + size + blocked-extension check |
 | 5 | Parse file → normalised DataFrame (CSV/TSV/Excel/JSON/XML/HTML/DOCX/PDF) |
@@ -126,9 +128,9 @@ Each pipeline run executes these 15 steps:
 
 **Job statuses:**
 - `SUCCESS` — all records written, zero exceptions
-- `SUCCESS_WITH_EXCEPTIONS` — records written, some DQ failures logged
-- `BLOCKED` — mandatory columns unmapped/below threshold; no canonical output written
-- `FAILED` — file could not be parsed at all
+- `SUCCESS_WITH_EXCEPTIONS` — records written, some DQ failures logged; also set when some (but not all) files in a batch are blocked
+- `BLOCKED` — **all** files in the batch had unresolved mandatory columns; no canonical output written
+- `FAILED` — no files could be parsed at all
 
 ---
 
@@ -187,15 +189,17 @@ python app.py --no-browser
 
 | Field | Description |
 |-------|-------------|
-| Upload file | Drag-drop or browse. Accepts CSV, XLSX, XLS, JSON, XML, TXT, DOCX, PDF, ZIP |
-| Domain | `trade` (more domains can be added via config) |
-| LLM Provider | `None` / `Claude` / `OpenAI` / `Gemini` — see [LLM Configuration](#7-llm-configuration) |
+| Upload file(s) | Drag-drop or browse. Select **one or more files** in a single interaction. Accepts CSV, XLSX, XLS, JSON, XML, TXT, DOCX, PDF, ZIP. All selected files are processed under one `Job_ID`. |
+| Domain | `trade` (more domains can be added via config). One domain applies to all files in the batch. |
+| LLM Provider | `None` / `Claude` / `OpenAI` / `Gemini` — see [LLM Configuration](#8-llm-configuration) |
 | API Key | Appears when a provider is selected. Auto-populated from `.env` if set |
 | Apply LLM to | `Unmatched only` (recommended) or `All columns` |
 | Advanced Settings | Sliders for mandatory threshold, fuzzy similarity, LLM accept threshold |
-| Column Overrides | Force-map a source column: one per line as `Source Col = TBL.Column` |
+| Column Overrides | Force-map a source column: one per line as `Source Col = TBL.Column`. Overrides apply across all files in the batch. |
 
-Click **Run Pipeline** → results populate the other tabs.
+**Two-step workflow:**
+1. Click **1) Analyze Mapping** — parses all files and shows a combined scorecard with a `Source_File` column identifying which file each row comes from.
+2. Review and optionally override any mappings, then click **2) Run Pipeline** — processes all files sequentially under the shared `Job_ID`.
 
 **Tab 2 — Results**
 - Status badge with job metadata and mapping stats
@@ -219,25 +223,28 @@ Click **Run Pipeline** → results populate the other tabs.
 ## 6. Running via CLI
 
 ```bash
-# Basic run
+# Single file (backward compatible)
 python pipeline.py path/to/file.csv
 
+# Multi-file batch — all files processed under one Job_ID
+python pipeline.py customer.csv invoice.xlsx --domain trade
+
+# ZIP + flat file together
+python pipeline.py batch.zip standalone.csv --domain trade
+
 # Full options
-python pipeline.py path/to/file.csv \
+python pipeline.py file1.csv file2.xlsx \
   --domain trade \
   --config-dir . \
   --output-dir ./output \
   --contributor-id CONTRIB001 \
   --preview
 
-# ZIP batch
-python pipeline.py path/to/batch.zip --domain trade
-
-# Force a column mapping
+# Force a column mapping (applies to all files in the batch)
 python pipeline.py file.csv --override "Billing Reference=TRD_INVOICE.Invoice_Number"
 
-# Multiple overrides
-python pipeline.py file.csv \
+# Multiple overrides with multiple files
+python pipeline.py customer.csv invoice.csv \
   --override "Billing Ref=TRD_INVOICE.Invoice_Number" \
   --override "Customer Code=TRD_CUSTOMER.Account_Number"
 ```
@@ -246,7 +253,66 @@ python pipeline.py file.csv \
 
 ---
 
-## 7. LLM Configuration
+## 7. Multi-File Batch Ingestion
+
+Multiple separate files can be uploaded in a single interaction and processed under one shared `Job_ID`.
+
+### How it works
+
+1. **Single `Job_ID`** is generated at the start of the job. Every row in `COLUMN_LINEAGE`, `RECORD_EXCEPTIONS`, `ARCHIVE_LINEAGE`, and `JOB_SUMMARY` references this one ID.
+2. **Files are parsed sequentially** in upload order. Each file goes through `parse_input_file()` independently. ZIP files are extracted as normal.
+3. **Mapping and DQ run per parsed sub-file.** Each file is mapped and quality-checked independently using the same domain config.
+4. **Outputs are unified.** After all files complete, canonical DataFrames are merged via `pd.concat()`, lineage rows are accumulated, and a single set of output artefacts is written to one job folder.
+
+### Unified outputs
+
+| Output | Behaviour |
+|--------|-----------|
+| Canonical CSVs | One per canonical table; rows from all source files merged, each tagged with `Source_Filename` |
+| Exceptions CSV | All exceptions from all files in one file |
+| Column Lineage CSV | All mapping decisions from all files; all rows share `Job_ID` |
+| Archive Lineage CSV | Populated if any uploaded file was a ZIP |
+| DQ Report JSON | Merged statistics across all files |
+| Job Summary JSON | Aggregate counts: `Files_Processed`, `Total_Source_Rows`, etc. |
+
+### Job Summary aggregation
+
+`JOB_SUMMARY` fields aggregate across all files:
+
+| Field | Value |
+|-------|-------|
+| `Source_Filename` | Comma-separated list of all uploaded filenames |
+| `Files_Processed` | Total successfully parsed files (including sub-files from ZIPs) |
+| `Files_Failed` | Total files that could not be parsed |
+| `Total_Source_Rows` | Sum of rows from all parsed files |
+| `Columns_Mapped_Exact/Fuzzy/LLM/Unmapped` | Sum across all files per match method |
+
+### Blocking behaviour (per-file)
+
+Mandatory-column blocking is evaluated **per file**:
+- If one file is blocked, the other files still produce canonical output.
+- `Job_Status = BLOCKED` only if **all** files in the batch are blocked.
+- If some files are blocked but others succeed, `Job_Status = SUCCESS_WITH_EXCEPTIONS`.
+
+### Edge cases
+
+| Scenario | Behaviour |
+|----------|-----------|
+| One file fails to parse | Logged as failed; remaining files continue; `Job_Status = SUCCESS_WITH_EXCEPTIONS` |
+| All files fail to parse | `Job_Status = FAILED`; `Files_Processed = 0` |
+| ZIP + flat file together | ZIP extracted (archive lineage written); flat file parsed directly; all sub-files share `Job_ID` |
+| Same column name in two files | Each file mapped independently; `COLUMN_LINEAGE` rows distinguished by `Source_Filename` |
+| Two files mapping to same canonical table | DataFrames merged via `pd.concat()`; `Source_Filename` preserves row origin |
+
+### Constraints
+
+- All files in a batch use the **same domain config** (one domain per batch).
+- One **override set** applies to all files (overrides match on source column name).
+- Files are processed **sequentially** (no parallel processing).
+
+---
+
+## 8. LLM Configuration
 
 LLM is **disabled by default** (`provider = "None"` in `trade_system_config.json`).
 
@@ -385,7 +451,7 @@ pip install google-generativeai  # Gemini
 
 ---
 
-## 8. Config Files Reference
+## 9. Config Files Reference
 
 ### `trade_system_config.json`
 Controls all runtime behaviour for the trade domain.
@@ -443,7 +509,7 @@ Defines 4 engine-owned system tables used across all domains:
 
 ---
 
-## 9. Output Files Reference
+## 10. Output Files Reference
 
 Each job creates its own subfolder under `./output/`:
 
@@ -488,7 +554,7 @@ The subfolder is named `<YYYYMMDD>_<job_id>`, making it easy to sort by date and
 
 ---
 
-## 10. Testing with Sample Files
+## 11. Testing with Sample Files
 
 Sample files are in `sample_trade_pack_v1/`. Each tests a different scenario.
 
@@ -518,6 +584,28 @@ python pipeline.py test_data/sample_invoices.csv --preview
 python pipeline.py test_data/test_batch.zip
 ```
 
+### Multi-file batch tests
+
+```bash
+# Two CSVs mapping to different canonical tables — one Job_ID, Files_Processed=2
+python pipeline.py sample_trade_pack_v1/trade_contrib_01_standard.csv \
+                   test_data/sample_invoices.csv --preview
+
+# CSV + TSV together
+python pipeline.py sample_trade_pack_v1/trade_contrib_01_standard.csv \
+                   sample_trade_pack_v1/trade_contrib_02_tsv.tsv --preview
+
+# ZIP + standalone CSV — archive lineage written for ZIP sub-files
+python pipeline.py test_data/test_batch.zip \
+                   test_data/sample_invoices.csv --preview
+```
+
+**What to verify in multi-file runs:**
+- All `COLUMN_LINEAGE` rows share the same `Job_ID`
+- Each row has the correct `Source_Filename`
+- `JOB_SUMMARY.Files_Processed` equals the number of successfully parsed files
+- Canonical CSVs contain rows from both files merged together
+
 ### Expected results for `sample_invoices.csv`
 - Source rows: 5
 - Canonical rows: 10 (5 customer + 5 invoice via shared-key propagation)
@@ -528,7 +616,7 @@ python pipeline.py test_data/test_batch.zip
 
 ---
 
-## 11. Adding a New Domain
+## 12. Adding a New Domain
 
 No code changes required. Create a domain subfolder with four files (the prompt is optional):
 
@@ -556,7 +644,7 @@ The engine picks up the new config automatically.
 
 ---
 
-## 12. LLM vs Machine Learning Model — Design Decision
+## 13. LLM vs Machine Learning Model — Design Decision
 
 ### Why not train a custom ML model for column mapping?
 
@@ -620,14 +708,15 @@ For a POC, and for most production deployments at reasonable scale, the LLM API 
 
 ---
 
-## 13. Troubleshooting
+## 14. Troubleshooting
 
 | Problem | Solution |
 |---------|----------|
 | `ModuleNotFoundError: gradio` | `pip install -r requirements.txt` |
 | `ModuleNotFoundError: anthropic` | `pip install anthropic` |
 | Port 7860 already in use | `python app.py --port 7861` |
-| Job status: BLOCKED | Check the Run Log tab — it lists which mandatory columns failed mapping. Use Column Overrides to force-map them. |
+| Job status: BLOCKED | All files in the batch had unresolved mandatory columns. Check the Run Log tab — it lists which mandatory columns failed and how many files were blocked (`X/N files blocked`). Use Column Overrides to force-map them. |
+| Job status: SUCCESS_WITH_EXCEPTIONS (unexpected) | Some files may have been individually blocked. Check `RECORD_EXCEPTIONS` — look for `UNMAPPED_MANDATORY` or `LOW_CONFIDENCE_MAPPING` exceptions and which `Source_Filename` they belong to. |
 | All columns show NO MATCH | Check the source file has a header row. Verify column names are readable. Try enabling LLM for unmatched columns. |
 | ZIP blocked (BLOCKED_ENCRYPTED) | The ZIP is password-protected. Decrypt it before uploading. |
 | PDF extraction empty | Install `pdfplumber`: `pip install pdfplumber`. For scanned PDFs: `pip install pytesseract Pillow` |

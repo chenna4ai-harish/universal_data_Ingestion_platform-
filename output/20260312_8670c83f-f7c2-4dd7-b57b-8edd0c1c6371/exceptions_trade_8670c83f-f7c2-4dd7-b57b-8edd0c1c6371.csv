@@ -1,0 +1,2 @@
+Exception_ID,Job_ID,Domain,Source_Filename,Source_Row_Index,Source_Column_Name,Canonical_Table,Canonical_Column,Raw_Value,Exception_Type,Reason,Insert_Timestamp
+b75db83f-beb1-4ff3-a8ee-bf84518f77fb,8670c83f-f7c2-4dd7-b57b-8edd0c1c6371,trade,setup.exe,,,,,,ARCHIVE_ERROR,Blocked file extension: .exe,2026-03-12T13:43:39.341358+00:00

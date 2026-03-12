@@ -8,6 +8,7 @@ Run:
   python app.py --port 7861 --share
 """
 
+
 from __future__ import annotations
 
 import json
@@ -338,7 +339,21 @@ def analyze_mappings(
             "<p style='color:#888'>Waiting for mapping analysis...</p>",
         )
 
-    file_path = uploaded_file if isinstance(uploaded_file, str) else uploaded_file.name
+    # Normalise to list of paths (Gradio sends list even for 1 file with file_count="multiple")
+    if not isinstance(uploaded_file, list):
+        uploaded_file = [uploaded_file]
+    file_paths = [f if isinstance(f, str) else f.name for f in uploaded_file]
+
+    if not file_paths:
+        return (
+            "<p style='color:#c0392b'>Upload a file first, then click Analyze Mapping.</p>",
+            empty_df,
+            gr.update(choices=[], value=None),
+            gr.update(choices=[], value=None),
+            gr.update(interactive=False),
+            "<p style='color:#888'>Waiting for mapping analysis...</p>",
+        )
+
     user_overrides = _parse_override_text(override_text)
     llm_override = _build_llm_override(
         llm_provider, api_key_input,
@@ -351,11 +366,19 @@ def analyze_mappings(
         lookup_table = load_lookup(CONFIG_DIR, domain)
         _apply_llm_override_to_config(system_cfg, llm_override)
 
-        parsed_files, failed_files, _ = parse_input_file(
-            file_path=file_path,
-            cfg=system_cfg,
-            job_id=f"ANALYZE-{uuid.uuid4()}",
-        )
+        analyze_job_id = f"ANALYZE-{uuid.uuid4()}"
+        all_parsed = []
+        all_failed = []
+        for fp in file_paths:
+            parsed, failed, _ = parse_input_file(
+                file_path=fp,
+                cfg=system_cfg,
+                job_id=analyze_job_id,
+            )
+            all_parsed.extend(parsed)
+            all_failed.extend(failed)
+        parsed_files = all_parsed
+        failed_files = all_failed
     except Exception as e:
         return (
             f"<p style='color:#c0392b'>Mapping analysis failed: {e}</p>",
@@ -379,7 +402,6 @@ def analyze_mappings(
 
     rows = []
     source_columns = set()
-    analyze_job_id = f"ANALYZE-{uuid.uuid4()}"
     for pf in parsed_files:
         mapping_results, _ = map_columns(
             source_columns=list(pf.dataframe.columns),
@@ -518,15 +540,30 @@ def run_ingestion(
             *_empty,
             pd.DataFrame(), pd.DataFrame(), pd.DataFrame(),
             *_no_files,
-            None, None, None,
+            None, None, None, None, None,
         )
 
-    file_path = uploaded_file if isinstance(uploaded_file, str) else uploaded_file.name
-    filename = os.path.basename(file_path)
+    # Normalise to list of paths (Gradio sends list even for 1 file with file_count="multiple")
+    if not isinstance(uploaded_file, list):
+        uploaded_file = [uploaded_file]
+    file_paths = [f if isinstance(f, str) else f.name for f in uploaded_file]
+
+    if not file_paths:
+        _empty = [pd.DataFrame() for _ in CANONICAL_TABLE_NAMES]
+        _no_files = [None for _ in CANONICAL_TABLE_NAMES]
+        return (
+            "<p style='color:#c0392b'>Process not started. Upload a file first.</p>",
+            "<p style='color:red'>No file uploaded.</p>",
+            "No file uploaded.", "",
+            *_empty,
+            pd.DataFrame(), pd.DataFrame(), pd.DataFrame(),
+            *_no_files,
+            None, None, None, None, None,
+        )
 
     try:
         summary = run_pipeline(
-            file_path=file_path,
+            file_paths=file_paths,
             domain=domain,
             config_dir=CONFIG_DIR,
             output_dir=OUTPUT_DIR,
@@ -548,7 +585,7 @@ def run_ingestion(
             *_empty,
             pd.DataFrame(), pd.DataFrame(), pd.DataFrame(),
             *_no_files,
-            None, None, None,
+            None, None, None, None, None,
         )
 
     dfs = summary.get("_dataframes", {})
@@ -574,6 +611,8 @@ def run_ingestion(
     dl_exc = files.get("exceptions")
     dl_lineage = files.get("column_lineage")
     dl_dq = files.get("dq_report")
+    dl_archive = files.get("archive_lineage")
+    dl_summary = files.get("job_summary")
 
     return (
         completion_html,
@@ -588,6 +627,8 @@ def run_ingestion(
         dl_exc,
         dl_lineage,
         dl_dq,
+        dl_archive,
+        dl_summary,
     )
 
 
@@ -631,7 +672,8 @@ def build_ui() -> gr.Blocks:
                     with gr.Column(scale=2):
                         gr.Markdown("### Input File")
                         file_input = gr.File(
-                            label="Upload file (CSV, XLSX, JSON, XML, TXT, DOCX, PDF, ZIP)",
+                            label="Upload file(s) (CSV, XLSX, JSON, XML, TXT, DOCX, PDF, ZIP)",
+                            file_count="multiple",
                             file_types=[
                                 ".csv", ".tsv", ".txt", ".xlsx", ".xls",
                                 ".json", ".xml", ".html", ".docx", ".pdf", ".zip"
@@ -717,7 +759,7 @@ def build_ui() -> gr.Blocks:
                     source_col_selector = gr.Dropdown(
                         choices=[],
                         label="Source column",
-                        info="Pick a source column from analysis results.",
+                        info="Pick a source column from analysis results. In multi-file batches, overrides apply by column name across all uploaded files.",
                     )
                     target_col_selector = gr.Dropdown(
                         choices=[],
@@ -798,6 +840,9 @@ def build_ui() -> gr.Blocks:
                     dl_exc = gr.File(label="Exceptions CSV")
                     dl_lineage = gr.File(label="Column Lineage CSV")
                     dl_dq = gr.File(label="DQ Report JSON")
+                with gr.Row():
+                    dl_archive = gr.File(label="Archive Lineage CSV")
+                    dl_summary = gr.File(label="Job Summary JSON")
 
         # ----------------------------------------------------------------
         # Event wiring
@@ -898,6 +943,8 @@ def build_ui() -> gr.Blocks:
                 dl_exc,
                 dl_lineage,
                 dl_dq,
+                dl_archive,
+                dl_summary,
             ],
         )
 

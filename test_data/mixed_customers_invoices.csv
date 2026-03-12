@@ -1,0 +1,6 @@
+account_number,company_name,country_code,city,invoice_number,invoice_date,due_date,invoice_amount,payment_terms,currency,doe
+CUST-020,Omicron Systems,US,Seattle,INV-2024-0030,2024-01-08,2024-02-07,19000.00,Net 30,USD,2024-03-31
+CUST-021,Pi Analytics Ltd,GB,Edinburgh,INV-2024-0031,2024-01-25,2024-04-24,38000.00,Net 90,GBP,2024-03-31
+CUST-022,Rho Consulting,AU,Brisbane,INV-2024-0032,2024-02-03,2024-03-04,6500.00,Net 30,AUD,2024-03-31
+CUST-023,Sigma Logistics,DE,Munich,INV-2024-0033,2024-02-20,2024-03-21,25000.00,Net 30,EUR,2024-03-31
+CUST-024,Tau Manufacturing,CA,Vancouver,INV-2024-0034,2024-03-05,2024-05-04,71000.00,Net 60,CAD,2024-03-31

@@ -1,0 +1,21 @@
+{
+  "Job_ID": "7a91c4fc-ba39-48ed-8811-425229c49dcc",
+  "Domain": "trade",
+  "Source_Filename": "trade_contrib_01_standard.csv, sample_invoices.csv",
+  "Job_Status": "SUCCESS_WITH_EXCEPTIONS",
+  "Files_Processed": 2,
+  "Files_Failed": 0,
+  "Total_Source_Rows": 35,
+  "Total_Canonical_Rows_Written": 70,
+  "Total_Exceptions": 10,
+  "Columns_Mapped_Exact": 30,
+  "Columns_Mapped_Fuzzy": 0,
+  "Columns_Mapped_LLM": 0,
+  "Columns_Unmapped": 0,
+  "Mandatory_Columns_Blocked": 0,
+  "Blocked_Mandatory_Details": [],
+  "Job_Start_Timestamp": "2026-03-12T12:42:56.816291+00:00",
+  "Job_End_Timestamp": "2026-03-12T12:42:57.057117+00:00",
+  "Config_Version": "1.2",
+  "Canonical_Model_Version": "1.3"
+}

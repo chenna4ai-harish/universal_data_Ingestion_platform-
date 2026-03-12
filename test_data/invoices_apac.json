@@ -1,0 +1,8 @@
+[
+  {"inv_num": "INV-2024-0040", "acct_no": "CUST-040", "inv_date": "2024-01-12", "due_dt": "2024-02-11", "inv_amt": 12500.00, "pmt_terms": "Net 30", "ccy": "JPY", "doe": "2024-03-31", "inv_type": "OPEN"},
+  {"inv_num": "INV-2024-0041", "acct_no": "CUST-041", "inv_date": "2024-01-20", "due_dt": "2024-04-19", "inv_amt": 87000.00, "pmt_terms": "Net 90", "ccy": "CNY", "doe": "2024-03-31", "inv_type": "OPEN"},
+  {"inv_num": "INV-2024-0042", "acct_no": "CUST-042", "inv_date": "2024-02-05", "due_dt": "2024-03-06", "inv_amt": 4300.00, "paid_dt": "2024-03-04", "paid_amt": 4300.00, "pmt_terms": "Net 30", "ccy": "KRW", "doe": "2024-03-31", "inv_type": "PAID"},
+  {"inv_num": "INV-2024-0043", "acct_no": "CUST-040", "inv_date": "2024-02-18", "due_dt": "2024-03-19", "inv_amt": 9800.00, "pmt_terms": "Net 30", "ccy": "JPY", "doe": "2024-03-31", "inv_type": "OPEN"},
+  {"inv_num": "INV-2024-0044", "acct_no": "CUST-043", "inv_date": "2024-03-01", "due_dt": "2024-04-30", "inv_amt": 55000.00, "pmt_terms": "Net 60", "ccy": "INR", "doe": "2024-03-31", "inv_type": "OPEN"},
+  {"inv_num": "INV-2024-0045", "acct_no": "CUST-044", "inv_date": "2024-03-15", "due_dt": "2024-04-14", "inv_amt": 23000.00, "paid_dt": "2024-04-12", "paid_amt": 23000.00, "pmt_terms": "Net 30", "ccy": "AUD", "doe": "2024-03-31", "inv_type": "PAID"}
+]

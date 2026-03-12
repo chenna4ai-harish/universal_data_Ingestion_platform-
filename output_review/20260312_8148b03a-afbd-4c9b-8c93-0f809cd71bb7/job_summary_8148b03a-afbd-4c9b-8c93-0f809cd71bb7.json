@@ -1,0 +1,26 @@
+{
+  "Job_ID": "8148b03a-afbd-4c9b-8c93-0f809cd71bb7",
+  "Domain": "trade",
+  "Source_Filename": "sample_invoices.csv, confidence_spread_test.csv",
+  "Job_Status": "SUCCESS_WITH_EXCEPTIONS",
+  "Files_Processed": 2,
+  "Files_Failed": 0,
+  "Total_Source_Rows": 10,
+  "Total_Canonical_Rows_Written": 10,
+  "Total_Exceptions": 9,
+  "Columns_Mapped_Exact": 17,
+  "Columns_Mapped_Fuzzy": 6,
+  "Columns_Mapped_LLM": 0,
+  "Columns_Unmapped": 4,
+  "Mandatory_Columns_Blocked": 4,
+  "Blocked_Mandatory_Details": [
+    "TRD_INVOICE.Payment_Terms",
+    "TRD_INVOICE.DOE",
+    "TRD_INVOICE.Due_Date",
+    "TRD_INVOICE.Invoice_Amount"
+  ],
+  "Job_Start_Timestamp": "2026-03-12T12:01:06.291888+00:00",
+  "Job_End_Timestamp": "2026-03-12T12:01:06.478944+00:00",
+  "Config_Version": "1.2",
+  "Canonical_Model_Version": "1.3"
+}

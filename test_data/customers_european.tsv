@@ -1,0 +1,7 @@
+customer_number	legal_name	vat_number	iso_country	street_address	address_line_2	municipality	region	postal_code
+CUST-030	Alpha GmbH	DE123456789	DE	Berliner Str. 10	Zimmer 201	Hamburg	Hamburg	20095
+CUST-031	Beta S.A.	FR987654321	FR	12 Rue de Rivoli		Paris	Île-de-France	75001
+CUST-032	Gamma B.V.	NL456789123	NL	Herengracht 400		Amsterdam	Noord-Holland	1017BX
+CUST-033	Delta S.r.l.	IT321654987	IT	Via Roma 55	Piano 3	Milan	Lombardy	20121
+CUST-034	Epsilon AB	SE789123456	SE	Drottninggatan 50		Stockholm	Stockholm County	11121
+CUST-035	Zeta AS	NO654321789	NO	Karl Johans gate 1		Oslo	Oslo	0154
