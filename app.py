@@ -8,6 +8,7 @@ Run:
   python app.py --port 7861 --share
 """
 
+
 from __future__ import annotations
 
 import json
