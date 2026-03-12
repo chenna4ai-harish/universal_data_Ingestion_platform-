@@ -3,8 +3,6 @@
 
 A config-driven pipeline that ingests contributor files in any format, maps columns to a canonical model using exact/fuzzy/LLM matching, runs data quality checks, and produces standardised outputs with full lineage.
 
-Detailed UI field guide: `UI_DOCUMENTATION.md`
-
 ---
 
 ## Table of Contents
@@ -22,6 +20,9 @@ Detailed UI field guide: `UI_DOCUMENTATION.md`
 12. [Troubleshooting](#12-troubleshooting)
 
 ---
+
+For a focused explanation of mapping logic and confidence scoring, see:
+- `UI_DOCUMENTATION.md` (Column Mapper: Exact -> Fuzzy -> LLM -> Override -> Propagation)
 
 ## 1. Project Structure
 
