@@ -1,0 +1,21 @@
+{
+  "Job_ID": "1ab1f9a0-8a1b-42d7-819d-8c10032041e3",
+  "Domain": "trade",
+  "Source_Filename": "test_batch.zip, sample_invoices.csv",
+  "Job_Status": "SUCCESS_WITH_EXCEPTIONS",
+  "Files_Processed": 3,
+  "Files_Failed": 1,
+  "Total_Source_Rows": 9,
+  "Total_Canonical_Rows_Written": 18,
+  "Total_Exceptions": 18,
+  "Columns_Mapped_Exact": 23,
+  "Columns_Mapped_Fuzzy": 0,
+  "Columns_Mapped_LLM": 0,
+  "Columns_Unmapped": 0,
+  "Mandatory_Columns_Blocked": 0,
+  "Blocked_Mandatory_Details": [],
+  "Job_Start_Timestamp": "2026-03-12T12:01:20.667740+00:00",
+  "Job_End_Timestamp": "2026-03-12T12:01:20.786241+00:00",
+  "Config_Version": "1.2",
+  "Canonical_Model_Version": "1.3"
+}
