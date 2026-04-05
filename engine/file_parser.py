@@ -329,6 +329,57 @@ def _parse_single_file(
 
 
 # ---------------------------------------------------------------------------
+# Lightweight column-only reader (for profile matching — avoids full parse)
+# ---------------------------------------------------------------------------
+
+def _detect_columns_only(file_path: str, cfg: dict) -> list[str]:
+    """
+    Read just the header row from a file and return the column names.
+    Used by the profile system to fingerprint without loading all data.
+    Falls back to full parse for formats that don't support header-only reads.
+    """
+    path = Path(file_path)
+    ext = path.suffix.lower()
+
+    try:
+        if ext in _TEXT_EXTENSIONS:
+            # Read only 2 rows (header + 1 data row) to detect columns
+            text, _ = _detect_encoding(path.read_bytes(), cfg)
+            import io as _io
+            import csv as _csv
+            reader = _csv.reader(_io.StringIO(text), dialect="excel")
+            header = next(reader, [])
+            return [c.strip() for c in header if c.strip()]
+
+        if ext in _EXCEL_EXTENSIONS:
+            import openpyxl as _openpyxl
+            wb = _openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+            ws = wb.active
+            header = [str(cell.value).strip() for cell in next(ws.iter_rows(max_row=1)) if cell.value]
+            wb.close()
+            return header
+
+        if ext == ".json":
+            import json as _json
+            raw = path.read_bytes()
+            text, _ = _detect_encoding(raw, cfg)
+            data = _json.loads(text)
+            if isinstance(data, list) and data and isinstance(data[0], dict):
+                return list(data[0].keys())
+            if isinstance(data, dict):
+                return list(data.keys())
+
+    except Exception:
+        pass
+
+    # Fallback: full parse, just return column names
+    with open(file_path, "rb") as fh:
+        raw = fh.read()
+    df, _ = _parse_single_file(raw, path.name, cfg)
+    return list(df.columns)
+
+
+# ---------------------------------------------------------------------------
 # ZIP handling
 # ---------------------------------------------------------------------------
 

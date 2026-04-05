@@ -1,0 +1,23 @@
+{
+  "Job_ID": "7ce7ccfe-a13d-4f51-9495-eab09e7ea4d4",
+  "Domain": "trade",
+  "Source_Filename": "customers_fuzzy.csv, invoices_fuzzy.csv",
+  "Job_Status": "SUCCESS_WITH_EXCEPTIONS",
+  "Files_Processed": 2,
+  "Files_Failed": 0,
+  "Total_Source_Rows": 11,
+  "Total_Canonical_Rows_Written": 5,
+  "Total_Exceptions": 1,
+  "Columns_Mapped_Exact": 20,
+  "Columns_Mapped_Fuzzy": 3,
+  "Columns_Mapped_LLM": 0,
+  "Columns_Unmapped": 0,
+  "Mandatory_Columns_Blocked": 1,
+  "Blocked_Mandatory_Details": [
+    "TRD_INVOICE.Invoice_Amount"
+  ],
+  "Job_Start_Timestamp": "2026-04-05T15:54:03.522926+00:00",
+  "Job_End_Timestamp": "2026-04-05T15:54:03.760974+00:00",
+  "Config_Version": "1.2",
+  "Canonical_Model_Version": "1.3"
+}

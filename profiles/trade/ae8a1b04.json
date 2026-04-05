@@ -1,0 +1,31 @@
+{
+  "fingerprint": "ae8a1b046fa19e71a561a60a534e29b689fcd3b2b831059afb19835d080bacad",
+  "name": "Profile1",
+  "domain": "trade",
+  "columns": [
+    "account_number",
+    "address_1",
+    "address_2",
+    "city",
+    "company_name",
+    "country_code",
+    "currency",
+    "doe",
+    "due_date",
+    "duns_number",
+    "invoice_amount",
+    "invoice_date",
+    "invoice_number",
+    "invoice_type",
+    "paid_amount",
+    "paid_date",
+    "payment_terms",
+    "postcode",
+    "state",
+    "tax_id"
+  ],
+  "overrides": {},
+  "use_count": 0,
+  "created_at": "2026-04-05",
+  "last_used": "2026-04-05"
+}

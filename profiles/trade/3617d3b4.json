@@ -1,0 +1,23 @@
+{
+  "fingerprint": "3617d3b4ff9d2c34448f4764d7a183816f03ce7eaf43e006d6d59ae0d930440b",
+  "name": "Customer Master",
+  "domain": "trade",
+  "columns": [
+    "account_number",
+    "address_1",
+    "address_2",
+    "city",
+    "company_name",
+    "country_code",
+    "duns_number",
+    "postcode",
+    "state",
+    "tax_id"
+  ],
+  "overrides": {
+    "tax_id": "TRD_CUSTOMER.Government_ID"
+  },
+  "use_count": 2,
+  "created_at": "2026-04-05",
+  "last_used": "2026-04-05"
+}

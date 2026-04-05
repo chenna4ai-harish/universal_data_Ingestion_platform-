@@ -1,0 +1,24 @@
+{
+  "fingerprint": "89c9d2d24475c2d3de8dbbfa694a1264f4c0d295db1277ee006574eff29a190d",
+  "name": "mixed",
+  "domain": "trade",
+  "columns": [
+    "account_number",
+    "city",
+    "company_name",
+    "country_code",
+    "currency",
+    "doe",
+    "due_date",
+    "invoice_amount",
+    "invoice_date",
+    "invoice_number",
+    "payment_terms"
+  ],
+  "overrides": {
+    "tax_id": "TRD_CUSTOMER.Government_ID"
+  },
+  "use_count": 1,
+  "created_at": "2026-04-05",
+  "last_used": "2026-04-05"
+}

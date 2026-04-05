@@ -1,0 +1,37 @@
+{
+  "3617d3b4ff9d2c34448f4764d7a183816f03ce7eaf43e006d6d59ae0d930440b": {
+    "fingerprint": "3617d3b4ff9d2c34448f4764d7a183816f03ce7eaf43e006d6d59ae0d930440b",
+    "name": "Customer Master",
+    "column_count": 10,
+    "use_count": 2,
+    "last_used": "2026-04-05"
+  },
+  "ae8a1b046fa19e71a561a60a534e29b689fcd3b2b831059afb19835d080bacad": {
+    "fingerprint": "ae8a1b046fa19e71a561a60a534e29b689fcd3b2b831059afb19835d080bacad",
+    "name": "Profile1",
+    "column_count": 20,
+    "use_count": 0,
+    "last_used": "2026-04-05"
+  },
+  "89c9d2d24475c2d3de8dbbfa694a1264f4c0d295db1277ee006574eff29a190d": {
+    "fingerprint": "89c9d2d24475c2d3de8dbbfa694a1264f4c0d295db1277ee006574eff29a190d",
+    "name": "mixed",
+    "column_count": 11,
+    "use_count": 1,
+    "last_used": "2026-04-05"
+  },
+  "30348eb4aa002249e378a5694bfeccfeea024127105bbac691f64d75ab0593d4": {
+    "fingerprint": "30348eb4aa002249e378a5694bfeccfeea024127105bbac691f64d75ab0593d4",
+    "name": "profile_fuzzy \u2014 customers_fuzzy.csv",
+    "column_count": 10,
+    "use_count": 2,
+    "last_used": "2026-04-05"
+  },
+  "5e58ce36dc1c0ee40621d41ca555dc8e1eda44990bcbcd1853973c0f1f289c81": {
+    "fingerprint": "5e58ce36dc1c0ee40621d41ca555dc8e1eda44990bcbcd1853973c0f1f289c81",
+    "name": "profile_fuzzy \u2014 invoices_fuzzy.csv",
+    "column_count": 11,
+    "use_count": 2,
+    "last_used": "2026-04-05"
+  }
+}

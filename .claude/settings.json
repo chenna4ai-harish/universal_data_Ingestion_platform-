@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(venv/Scripts/python.exe pipeline.py test_data/customers_exact.csv --domain trade)",
+      "Bash(grep -E \"\\\\.py$|engine|domains\")"
+    ]
+  }
+}

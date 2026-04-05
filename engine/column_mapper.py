@@ -225,12 +225,16 @@ def _llm_map_claude(
         max_tokens=max_tokens,
         temperature=temperature,
         messages=[{"role": "user", "content": prompt}],
+        timeout=timeout,
     )
     raw = message.content[0].text.strip()
     # Strip markdown fences if present
     raw = re.sub(r"^```json\s*", "", raw)
     raw = re.sub(r"\s*```$", "", raw)
-    parsed = json.loads(raw)
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"LLM (Claude) returned invalid JSON for '{source_col}': {exc}. Raw: {raw[:200]!r}")
     return (
         parsed.get("canonical_table"),
         parsed.get("canonical_column", "UNMAPPED"),
@@ -248,6 +252,7 @@ def _llm_map_openai(
     lookup_context: str,
 ) -> tuple[str | None, str | None, int, str]:
     model = cfg["llm"]["model"]["OpenAI"]
+    timeout = cfg["llm"].get("timeout_seconds", 30)
     try:
         from openai import OpenAI
     except ImportError:
@@ -263,9 +268,13 @@ def _llm_map_openai(
         model=model,
         messages=[{"role": "user", "content": prompt}],
         response_format={"type": "json_object"},
+        timeout=timeout,
     )
-    raw = resp.choices[0].message.content
-    parsed = json.loads(raw)
+    raw = resp.choices[0].message.content or ""
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"LLM (OpenAI) returned invalid JSON for '{source_col}': {exc}. Raw: {raw[:200]!r}")
     return (
         parsed.get("canonical_table"),
         parsed.get("canonical_column", "UNMAPPED"),
@@ -283,6 +292,7 @@ def _llm_map_gemini(
     lookup_context: str,
 ) -> tuple[str | None, str | None, int, str]:
     model_name = cfg["llm"]["model"]["Gemini"]
+    timeout = cfg["llm"].get("timeout_seconds", 30)
     try:
         from google import genai
         from google.genai import types as genai_types
@@ -301,6 +311,7 @@ def _llm_map_gemini(
     gen_cfg = genai_types.GenerateContentConfig(
         temperature=cfg["llm"].get("temperature", 0),
         max_output_tokens=cfg["llm"].get("max_tokens", 1000),
+        http_options={"timeout": timeout},
     )
     resp = client.models.generate_content(
         model=model_name,
@@ -310,7 +321,10 @@ def _llm_map_gemini(
     raw = resp.text.strip()
     raw = re.sub(r"^```json\s*", "", raw)
     raw = re.sub(r"\s*```$", "", raw)
-    parsed = json.loads(raw)
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"LLM (Gemini) returned invalid JSON for '{source_col}': {exc}. Raw: {raw[:200]!r}")
     return (
         parsed.get("canonical_table"),
         parsed.get("canonical_column", "UNMAPPED"),

@@ -121,6 +121,7 @@ def _build_canonical_tables(
     source_contributor_id: str,
     source_file_format: str,
     job_id: str,
+    direct_tables: set[str] | None = None,
 ) -> tuple[dict[str, pd.DataFrame], dict[str, dict[str, str]]]:
     """
     Project source DataFrame rows into canonical tables based on mapping results.
@@ -147,6 +148,12 @@ def _build_canonical_tables(
             continue
         if tbl not in table_col_map:
             continue
+        # Skip tables whose only mapped columns came from propagation — those
+        # are shared-key columns inherited from another table and would produce
+        # hollow rows (e.g. customer file writing Account_Number-only rows into
+        # TRD_INVOICE because Account_Number propagates to both tables).
+        if direct_tables is not None and tbl not in direct_tables:
+            continue
 
         col_map = table_col_map[tbl]    # canonical_col -> source_col
         business_cols = list(tdef.get("business_columns", {}).keys())
@@ -156,7 +163,8 @@ def _build_canonical_tables(
             record = {}
             for can_col in business_cols:
                 src_col = col_map.get(can_col)
-                record[can_col] = str(src_row[src_col]).strip() if (src_col and src_col in src_row) else None
+                val = src_row.get(src_col) if src_col else None
+                record[can_col] = str(val).strip() if val is not None else None
 
             # Lineage columns
             record["Source_Filename"] = source_filename
@@ -241,8 +249,17 @@ def _process_parsed_file(
         print(f"  BLOCKED: mandatory columns not met: {cols_str}")
         return {}, mapping_results, mapping_reference_id, mapping_excs, {}, blocked_mandatory
 
-    # Build canonical tables
+    # Build canonical tables — only write rows to tables that are "active" for
+    # this file (mirrors _check_blocked_mandatory logic in column_mapper.py).
+    # A table needs >=2 non-propagated mapped columns to be considered active;
+    # a single shared FK column (e.g. account_number propagated to both tables)
+    # is not enough to justify writing hollow rows into that table.
     col_map = build_column_map(mapping_results)
+    direct_count: dict[str, int] = {}
+    for _r in mapping_results:
+        if _r.canonical_table and _r.canonical_column != "UNMAPPED" and not _r.is_propagated:
+            direct_count[_r.canonical_table] = direct_count.get(_r.canonical_table, 0) + 1
+    direct_tables = {tbl for tbl, cnt in direct_count.items() if cnt >= 2}
     canonical_tables, source_col_maps = _build_canonical_tables(
         df, col_map, canonical_model,
         mapping_reference_id,
@@ -250,6 +267,7 @@ def _process_parsed_file(
         contributor_id,
         parsed_file.file_format,
         job_id,
+        direct_tables=direct_tables,
     )
 
     print(f"  Running DQ on {sum(len(t) for t in canonical_tables.values())} canonical records...")
@@ -373,6 +391,39 @@ def run_pipeline(
          f"Model version: {canonical_model_version}, "
          f"Lookup entries: {len(lookup_table)}, "
          f"LLM: {system_cfg.get('llm', {}).get('provider', 'None')}")
+
+    # --- Profile check (per file, before parsing) ---
+    try:
+        from engine.profile_store import match_profile, increment_use_count
+        from engine.file_parser import _detect_columns_only
+        _log("\nChecking mapping profiles...")
+        for fp in file_paths:
+            try:
+                cols = _detect_columns_only(fp, system_cfg)
+                pm = match_profile(cols, config_dir, domain)
+                fname = os.path.basename(fp)
+                if pm.tier == "EXACT" and pm.profile:
+                    _log(f"  [PROFILE] EXACT MATCH for '{fname}': "
+                         f"\"{pm.profile.name}\" "
+                         f"(ID: {pm.profile.fingerprint[:8]}, "
+                         f"{pm.profile.use_count} previous use(s), "
+                         f"{len(pm.profile.overrides)} override(s))")
+                    # Merge profile overrides — user_overrides already contain them
+                    # (pre-seeded by UI); log confirms they are active
+                    if pm.profile.overrides:
+                        for src, tgt in pm.profile.overrides.items():
+                            _log(f"    Override active: {src} -> {tgt}")
+                    increment_use_count(pm.profile.fingerprint, config_dir, domain)
+                elif pm.tier == "PARTIAL" and pm.profile:
+                    pct = int(pm.overlap * 100)
+                    _log(f"  [PROFILE] PARTIAL MATCH for '{fname}': "
+                         f"\"{pm.profile.name}\" ({pct}% overlap) — not auto-applied")
+                else:
+                    _log(f"  [PROFILE] No profile match for '{fname}' — fresh analysis")
+            except Exception as _prof_err:
+                _log(f"  [PROFILE] Check skipped for '{fname}' — {_prof_err}")
+    except ImportError:
+        pass   # profile_store not available (e.g. CLI without profiles dir)
 
     # --- Parse all uploaded files ---
     all_parsed_files = []
