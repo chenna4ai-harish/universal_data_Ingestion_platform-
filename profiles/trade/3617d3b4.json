@@ -1,6 +1,6 @@
 {
   "fingerprint": "3617d3b4ff9d2c34448f4764d7a183816f03ce7eaf43e006d6d59ae0d930440b",
-  "name": "Customer Master",
+  "name": "profile_1 \u2014 customers_exact.csv",
   "domain": "trade",
   "columns": [
     "account_number",
@@ -14,10 +14,142 @@
     "state",
     "tax_id"
   ],
-  "overrides": {
-    "tax_id": "TRD_CUSTOMER.Government_ID"
-  },
-  "use_count": 2,
-  "created_at": "2026-04-05",
-  "last_used": "2026-04-05"
+  "overrides": {},
+  "use_count": 3,
+  "created_at": "2026-04-06",
+  "last_used": "2026-04-06",
+  "mappings": [
+    {
+      "Source_File": "customers_exact.csv",
+      "Source_Column": "account_number",
+      "Suggested_Target": "TRD_CUSTOMER.Account_Number",
+      "Selected_Target": "TRD_CUSTOMER.Account_Number",
+      "Match_Method": "EXACT LOOKUP",
+      "Confidence_Score": 100,
+      "Was_Mandatory": true,
+      "Met_Threshold": true,
+      "Is_Propagated": false,
+      "LLM_Reasoning": ""
+    },
+    {
+      "Source_File": "customers_exact.csv",
+      "Source_Column": "company_name",
+      "Suggested_Target": "TRD_CUSTOMER.Company_Name",
+      "Selected_Target": "TRD_CUSTOMER.Company_Name",
+      "Match_Method": "EXACT LOOKUP",
+      "Confidence_Score": 100,
+      "Was_Mandatory": true,
+      "Met_Threshold": true,
+      "Is_Propagated": false,
+      "LLM_Reasoning": ""
+    },
+    {
+      "Source_File": "customers_exact.csv",
+      "Source_Column": "duns_number",
+      "Suggested_Target": "TRD_CUSTOMER.DUNS_Number",
+      "Selected_Target": "TRD_CUSTOMER.DUNS_Number",
+      "Match_Method": "EXACT LOOKUP",
+      "Confidence_Score": 100,
+      "Was_Mandatory": false,
+      "Met_Threshold": true,
+      "Is_Propagated": false,
+      "LLM_Reasoning": ""
+    },
+    {
+      "Source_File": "customers_exact.csv",
+      "Source_Column": "tax_id",
+      "Suggested_Target": "TRD_CUSTOMER.Government_ID",
+      "Selected_Target": "TRD_CUSTOMER.Government_ID",
+      "Match_Method": "EXACT LOOKUP",
+      "Confidence_Score": 100,
+      "Was_Mandatory": false,
+      "Met_Threshold": true,
+      "Is_Propagated": false,
+      "LLM_Reasoning": ""
+    },
+    {
+      "Source_File": "customers_exact.csv",
+      "Source_Column": "country_code",
+      "Suggested_Target": "TRD_CUSTOMER.Country_Code",
+      "Selected_Target": "TRD_CUSTOMER.Country_Code",
+      "Match_Method": "EXACT LOOKUP",
+      "Confidence_Score": 100,
+      "Was_Mandatory": false,
+      "Met_Threshold": true,
+      "Is_Propagated": false,
+      "LLM_Reasoning": ""
+    },
+    {
+      "Source_File": "customers_exact.csv",
+      "Source_Column": "address_1",
+      "Suggested_Target": "TRD_CUSTOMER.Address_1",
+      "Selected_Target": "TRD_CUSTOMER.Address_1",
+      "Match_Method": "EXACT LOOKUP",
+      "Confidence_Score": 100,
+      "Was_Mandatory": false,
+      "Met_Threshold": true,
+      "Is_Propagated": false,
+      "LLM_Reasoning": ""
+    },
+    {
+      "Source_File": "customers_exact.csv",
+      "Source_Column": "address_2",
+      "Suggested_Target": "TRD_CUSTOMER.Address_2",
+      "Selected_Target": "TRD_CUSTOMER.Address_2",
+      "Match_Method": "EXACT LOOKUP",
+      "Confidence_Score": 100,
+      "Was_Mandatory": false,
+      "Met_Threshold": true,
+      "Is_Propagated": false,
+      "LLM_Reasoning": ""
+    },
+    {
+      "Source_File": "customers_exact.csv",
+      "Source_Column": "city",
+      "Suggested_Target": "TRD_CUSTOMER.City",
+      "Selected_Target": "TRD_CUSTOMER.City",
+      "Match_Method": "EXACT LOOKUP",
+      "Confidence_Score": 100,
+      "Was_Mandatory": false,
+      "Met_Threshold": true,
+      "Is_Propagated": false,
+      "LLM_Reasoning": ""
+    },
+    {
+      "Source_File": "customers_exact.csv",
+      "Source_Column": "state",
+      "Suggested_Target": "TRD_CUSTOMER.State",
+      "Selected_Target": "TRD_CUSTOMER.State",
+      "Match_Method": "EXACT LOOKUP",
+      "Confidence_Score": 100,
+      "Was_Mandatory": false,
+      "Met_Threshold": true,
+      "Is_Propagated": false,
+      "LLM_Reasoning": ""
+    },
+    {
+      "Source_File": "customers_exact.csv",
+      "Source_Column": "postcode",
+      "Suggested_Target": "TRD_CUSTOMER.Postcode",
+      "Selected_Target": "TRD_CUSTOMER.Postcode",
+      "Match_Method": "EXACT LOOKUP",
+      "Confidence_Score": 100,
+      "Was_Mandatory": false,
+      "Met_Threshold": true,
+      "Is_Propagated": false,
+      "LLM_Reasoning": ""
+    },
+    {
+      "Source_File": "customers_exact.csv",
+      "Source_Column": "account_number",
+      "Suggested_Target": "TRD_INVOICE.Account_Number",
+      "Selected_Target": "TRD_INVOICE.Account_Number",
+      "Match_Method": "EXACT LOOKUP",
+      "Confidence_Score": 100,
+      "Was_Mandatory": true,
+      "Met_Threshold": true,
+      "Is_Propagated": true,
+      "LLM_Reasoning": ""
+    }
+  ]
 }

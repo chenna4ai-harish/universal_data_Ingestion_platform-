@@ -427,34 +427,52 @@ def analyze_mappings(
 
     # ------------------------------------------------------------------
     # Profile check — per file, not per batch
-    # Each file is matched independently so a profile saved from a
-    # single-file run matches that file even when it's part of a batch.
+    # EXACT match with stored mappings: skip the engine entirely.
+    # EXACT match without mappings (old profile): pre-load overrides only.
+    # PARTIAL match: show suggestion banner, still run engine.
     # ------------------------------------------------------------------
     merged_profile_overrides: dict[str, tuple[str, str]] = {}
     exact_names: list[str] = []
-    partial_match: tuple[str, str, float] | None = None   # (fingerprint, name, overlap)
+    partial_match: tuple[str, str, float] | None = None
+    # Rows collected from profile cache (skip engine for these files)
+    cached_rows: list[dict] = []
+    cached_source_columns: set[str] = set()
+    files_needing_engine: list = []   # parsed files not covered by cache
 
     for pf in parsed_files:
         file_cols = list(pf.dataframe.columns)
-        file_match = match_profile(file_cols, CONFIG_DIR, domain)
+        file_match = match_profile(file_cols, CONFIG_DIR, domain, cfg=system_cfg)
 
         if file_match.tier == "EXACT" and file_match.profile:
             profile_overrides_parsed = _parse_override_text(
                 "\n".join(f"{k} = {v}" for k, v in file_match.profile.overrides.items())
             )
-            # Profile overrides are base; user_overrides always win on conflict
             merged_profile_overrides = {**merged_profile_overrides, **profile_overrides_parsed}
             increment_use_count(file_match.profile.fingerprint, CONFIG_DIR, domain)
             exact_names.append(f"\"{file_match.profile.name}\" ({pf.source_filename})")
 
+            if file_match.profile.mappings:
+                # Full mapping cached — restore scorecard rows, skip engine for this file
+                for row in file_match.profile.mappings:
+                    row_copy = dict(row)
+                    # Stamp with current source filename in case it differs from saved name
+                    row_copy["Source_File"] = pf.source_filename
+                    cached_source_columns.add(row_copy.get("Source_Column", ""))
+                    cached_rows.append(row_copy)
+            else:
+                # Old profile — no cached mappings, fall through to engine
+                files_needing_engine.append(pf)
+
         elif file_match.tier == "PARTIAL" and file_match.profile:
-            # Keep the best partial match across all files in the batch
             if partial_match is None or file_match.overlap > partial_match[2]:
                 partial_match = (
                     file_match.profile.fingerprint,
                     file_match.profile.name,
                     file_match.overlap,
                 )
+            files_needing_engine.append(pf)
+        else:
+            files_needing_engine.append(pf)
 
     # Merge: profile overrides base, user overrides on top
     combined_overrides = {**merged_profile_overrides, **user_overrides}
@@ -464,12 +482,14 @@ def analyze_mappings(
         override_text_updated = _format_override_text(combined_overrides)
         names_str = ", ".join(exact_names)
         total_overrides = len(combined_overrides)
+        skipped = len(parsed_files) - len(files_needing_engine)
         profile_banner_html = (
             f"<div style='border-left:4px solid #1a7a4a;background:#f0faf4;"
             f"padding:8px 12px;border-radius:4px;margin-bottom:6px'>"
             f"<b style='color:#1a7a4a'>Profile(s) auto-applied:</b> {names_str} "
-            f"&nbsp;|&nbsp; {total_overrides} override(s) loaded. "
-            f"Scorecard pre-filled — click <b>Run Pipeline</b> directly or adjust below."
+            f"&nbsp;|&nbsp; {total_overrides} override(s) loaded"
+            + (f" &nbsp;|&nbsp; mapping engine skipped for {skipped} file(s)" if skipped else "")
+            + f". Scorecard pre-filled — click <b>Run Pipeline</b> directly or adjust below."
             f"</div>"
         )
     elif partial_match:
@@ -488,11 +508,11 @@ def analyze_mappings(
         profile_banner_html = ""
 
     # ------------------------------------------------------------------
-    # Run the column mapper
+    # Run the column mapper — only for files not covered by profile cache
     # ------------------------------------------------------------------
-    rows = []
-    source_columns = set()
-    for pf in parsed_files:
+    rows = list(cached_rows)
+    source_columns = set(cached_source_columns)
+    for pf in files_needing_engine:
         mapping_results, _ = map_columns(
             source_columns=list(pf.dataframe.columns),
             lookup_table=lookup_table,
@@ -537,7 +557,11 @@ def analyze_mappings(
             f"Files: {len(parsed_files)}, Columns: {len(mapping_df)}, "
             f"Below threshold: {blocked_count}.</p>"
         )
-        completion_msg = "<p style='color:#1a7a4a'><b>Profile(s) applied.</b> Review scorecard and click <b>Run Pipeline</b>.</p>"
+        completion_msg = (
+            f"<p style='color:#1a7a4a'><b>Profile(s) applied:</b> {names_str} "
+            f"&mdash; {total_overrides} override(s) pre-loaded. "
+            f"Review scorecard and click <b>Run Pipeline</b>.</p>"
+        )
     else:
         analysis_msg = (
             f"<p style='color:#1a7a4a'><b>Mapping Analysis Completed.</b> "
@@ -567,8 +591,9 @@ def ui_save_profile(
     domain: str,
     override_text: str,
     profile_name: str,
+    scorecard_df,
 ):
-    """Save current file columns + overrides as a named profile."""
+    """Save current file columns + full mapping scorecard + overrides as a named profile."""
     if not uploaded_file:
         return "<p style='color:#c0392b'>Upload a file first before saving a profile.</p>", gr.update()
     if not profile_name or not profile_name.strip():
@@ -592,10 +617,46 @@ def ui_save_profile(
 
     # Convert override_text to {source_col: "TABLE.Column"} format
     parsed_overrides = _parse_override_text(override_text)
-    overrides_flat = {src: f"{tbl}.{col}" for src, (tbl, col) in parsed_overrides.items()}
+    all_overrides_flat = {src: f"{tbl}.{col}" for src, (tbl, col) in parsed_overrides.items()}
+
+    # Convert scorecard dataframe to list of dicts for storage
+    # Group rows by source file so we can attach them to the right per-file profile
+    all_scorecard_rows: list[dict] = []
+    if scorecard_df is not None and not (hasattr(scorecard_df, "empty") and scorecard_df.empty):
+        if isinstance(scorecard_df, pd.DataFrame):
+            all_scorecard_rows = scorecard_df.to_dict(orient="records")
+        elif isinstance(scorecard_df, list):
+            all_scorecard_rows = scorecard_df
 
     saved_summaries = []
     for source_filename, cols in per_file_cols:
+        # Only save overrides whose source column actually exists in this file
+        cols_lower = {c.strip().lower() for c in cols}
+        file_overrides = {
+            src: tgt for src, tgt in all_overrides_flat.items()
+            if src.strip().lower() in cols_lower
+        }
+
+        # Filter scorecard rows to this file only
+        file_mappings = [
+            row for row in all_scorecard_rows
+            if row.get("Source_File", "") == source_filename
+        ]
+        # For single-file batches, all rows belong to this file
+        if not file_mappings and len(per_file_cols) == 1:
+            file_mappings = all_scorecard_rows
+
+        # Serialise booleans/numbers for JSON safety
+        clean_mappings = []
+        for row in file_mappings:
+            clean_mappings.append({
+                k: (bool(v) if isinstance(v, (bool,)) else
+                    int(v) if isinstance(v, (int,)) else
+                    float(v) if isinstance(v, (float,)) else
+                    str(v) if v is not None else "")
+                for k, v in row.items()
+            })
+
         # Name: user-supplied for single file; append filename for multi-file batches
         pname = (
             profile_name.strip()
@@ -604,12 +665,16 @@ def ui_save_profile(
         )
         p = save_profile(
             columns=cols,
-            overrides=overrides_flat,
+            overrides=file_overrides,
             name=pname,
             domain=domain,
             config_dir=CONFIG_DIR,
+            mappings=clean_mappings,
         )
-        saved_summaries.append(f"\"{p.name}\" ({len(cols)} cols, ID: {p.fingerprint[:8]})")
+        saved_summaries.append(
+            f"\"{p.name}\" ({len(cols)} cols, {len(clean_mappings)} mapping(s), "
+            f"{len(file_overrides)} override(s), ID: {p.fingerprint[:8]})"
+        )
 
     return (
         f"<p style='color:#1a7a4a'><b>Profile(s) saved:</b> {'; '.join(saved_summaries)}</p>",
@@ -944,15 +1009,15 @@ def build_ui() -> gr.Blocks:
                     analyze_btn = gr.Button("1) Analyze Mapping", variant="secondary", size="lg")
                     run_btn = gr.Button("2) Run Pipeline", variant="primary", size="lg", interactive=False)
 
-                # Profile detection banner — shown/hidden by analyze_mappings()
-                profile_banner = gr.HTML(visible=False, value="")
-
                 # Hidden state: fingerprint of partial match so "Apply Suggested" can load it
                 partial_match_fp = gr.State(value="")
 
                 completion_banner = gr.HTML("<p style='color:#888'>Analyze mapping, review/adjust, then run pipeline.</p>")
 
                 gr.Markdown("### Step 1 Output - Column Mapper Scorecard")
+
+                # Profile detection banner — shown directly above scorecard so it stays in view
+                profile_banner = gr.HTML(visible=False, value="")
                 gr.Markdown(
                     "Edit the **Selected_Target** cell for any row to override a mapping, "
                     "then click **Save Overrides from Scorecard** below. "
@@ -1207,10 +1272,10 @@ def build_ui() -> gr.Blocks:
             outputs=[apply_suggested_btn],
         )
 
-        # Save profile
+        # Save profile — pass scorecard so full mappings are stored
         save_profile_btn.click(
             fn=ui_save_profile,
-            inputs=[file_input, domain_dd, override_text, profile_name_input],
+            inputs=[file_input, domain_dd, override_text, profile_name_input, mapping_scorecard],
             outputs=[profile_save_feedback, profiles_table],
         )
 

@@ -57,6 +57,9 @@ class Profile:
     use_count: int
     created_at: str
     last_used: str
+    # Full scorecard rows — list of dicts with the same keys as the UI scorecard.
+    # When present, EXACT matches skip the mapping engine entirely.
+    mappings: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -126,6 +129,7 @@ def _load_profile(config_dir: str, domain: str, fp: str) -> Profile | None:
         return None
     with open(path, encoding="utf-8") as fh:
         d = json.load(fh)
+    d.setdefault("mappings", [])   # backwards-compat: old profiles had no mappings field
     return Profile(**d)
 
 
@@ -144,6 +148,7 @@ def match_profile(
     columns: list[str],
     config_dir: str,
     domain: str,
+    cfg: dict | None = None,
 ) -> MatchResult:
     """
     Check incoming columns against saved profiles.
@@ -152,7 +157,14 @@ def match_profile(
     For EXACT: profile is fully loaded, overrides ready to apply.
     For PARTIAL: best-match profile loaded, overlap ratio provided.
     For NONE: profile is None.
+
+    cfg: system config dict — if provided, reads profile_partial_threshold
+         from cfg["matching"]. Falls back to PARTIAL_THRESHOLD constant.
     """
+    threshold = PARTIAL_THRESHOLD
+    if cfg:
+        threshold = float(cfg.get("matching", {}).get("profile_partial_threshold", PARTIAL_THRESHOLD))
+
     fp = fingerprint(columns)
     index = _load_index(config_dir, domain)
 
@@ -191,7 +203,7 @@ def match_profile(
             best_overlap = overlap
             best_fp = saved_fp
 
-    if best_overlap >= PARTIAL_THRESHOLD and best_fp:
+    if best_overlap >= threshold and best_fp:
         profile = _load_profile(config_dir, domain, best_fp)
         tier = "EXACT" if best_overlap == 1.0 else "PARTIAL"
         return MatchResult(tier=tier, profile=profile, overlap=round(best_overlap, 3))
@@ -205,20 +217,23 @@ def save_profile(
     name: str,
     domain: str,
     config_dir: str,
+    mappings: list[dict] | None = None,
 ) -> Profile:
     """
     Save or update a mapping profile.
 
     overrides format: {source_col: "TABLE.Column"}
-    If a profile with the same fingerprint already exists, it is updated
-    (overrides merged, use_count preserved, name updated if changed).
+    mappings: full scorecard rows (list of dicts). When provided, EXACT matches
+              can skip the mapping engine entirely on future runs.
+    If a profile with the same fingerprint already exists it is updated
+    (overrides merged, mappings replaced, use_count preserved, name updated if changed).
     """
     fp = fingerprint(columns)
     now = datetime.now(timezone.utc).date().isoformat()
     existing = _load_profile(config_dir, domain, fp)
 
     if existing:
-        # Merge: new overrides take precedence over saved ones
+        # Merge overrides: new take precedence over saved
         merged = {**existing.overrides, **overrides}
         profile = Profile(
             fingerprint=fp,
@@ -229,6 +244,7 @@ def save_profile(
             use_count=existing.use_count,
             created_at=existing.created_at,
             last_used=now,
+            mappings=mappings if mappings is not None else existing.mappings,
         )
     else:
         profile = Profile(
@@ -240,6 +256,7 @@ def save_profile(
             use_count=0,
             created_at=now,
             last_used=now,
+            mappings=mappings or [],
         )
 
     _save_profile(config_dir, domain, profile)
