@@ -3,14 +3,14 @@
     "fingerprint": "3617d3b4ff9d2c34448f4764d7a183816f03ce7eaf43e006d6d59ae0d930440b",
     "name": "profile_1 \u2014 customers_exact.csv",
     "column_count": 10,
-    "use_count": 3,
-    "last_used": "2026-04-06"
+    "use_count": 12,
+    "last_used": "2026-04-10"
   },
   "c56e97e61f2cb61cfdd82d60d52e551445b02a43dde52f6ad1eef77d22502758": {
     "fingerprint": "c56e97e61f2cb61cfdd82d60d52e551445b02a43dde52f6ad1eef77d22502758",
     "name": "profile_1 \u2014 invoices_exact.csv",
     "column_count": 11,
-    "use_count": 3,
-    "last_used": "2026-04-06"
+    "use_count": 19,
+    "last_used": "2026-04-10"
   }
 }

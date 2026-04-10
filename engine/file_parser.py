@@ -413,6 +413,7 @@ def _unpack_zip(
     root_archive: str | None,
     current_depth: int,
     file_count_tracker: list[int],   # mutable counter [total_files_so_far]
+    uncompressed_size_tracker: list[int],  # mutable counter [total_uncompressed_bytes_so_far]
     extract_dir: str,
 ) -> None:
     """Recursively unpack a ZIP, respecting all safety controls."""
@@ -423,8 +424,8 @@ def _unpack_zip(
     max_single_mb = ing.get("max_single_extracted_file_mb", 500)
     block_encrypted = ing.get("block_encrypted_archives", True)
     detect_slip = ing.get("detect_zip_slip", True)
-    quarantine = ing.get("quarantine_failed_entries", True)
     ts = datetime.now(timezone.utc).isoformat()
+    max_total_bytes = max_total_mb * 1024 * 1024
 
     if current_depth > max_depth:
         failed_files.append(FailedFile(
@@ -525,9 +526,28 @@ def _unpack_zip(
             ))
             continue
 
+        # Total uncompressed size check (zip bomb guardrail)
+        projected_total = uncompressed_size_tracker[0] + info.file_size
+        if projected_total > max_total_bytes:
+            archive_lineage_rows.append(ArchiveLineageRow(
+                archive_lineage_id=alid, job_id=job_id,
+                source_filename=os.path.basename(entry_name),
+                parent_archive=zip_filename, root_archive=root_archive or zip_filename,
+                archive_entry_name=entry_name, extracted_path="BLOCKED",
+                nested_level=current_depth, file_size_bytes=info.file_size,
+                extraction_status="BLOCKED_TOTAL_SIZE", insert_timestamp=ts,
+            ))
+            failed_files.append(FailedFile(
+                source_filename=entry_name, exception_type="ARCHIVE_ERROR",
+                reason=f"Exceeded max_uncompressed_size_mb ({max_total_mb}MB) while extracting archive",
+                archive_lineage_id=alid,
+            ))
+            return
+
         # Extract bytes
         try:
             raw = zf.read(entry_name)
+            uncompressed_size_tracker[0] = projected_total
         except Exception as e:
             archive_lineage_rows.append(ArchiveLineageRow(
                 archive_lineage_id=alid, job_id=job_id,
@@ -564,6 +584,7 @@ def _unpack_zip(
                     root_archive=root_archive or zip_filename,
                     current_depth=current_depth + 1,
                     file_count_tracker=file_count_tracker,
+                    uncompressed_size_tracker=uncompressed_size_tracker,
                     extract_dir=extract_dir,
                 )
             else:
@@ -681,6 +702,7 @@ def parse_input_file(
                 root_archive=filename,
                 current_depth=1,
                 file_count_tracker=[0],
+                uncompressed_size_tracker=[0],
                 extract_dir=tmpdir,
             )
         return parsed_files, failed_files, archive_lineage_rows

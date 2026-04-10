@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import csv
 import json
+import logging
 import os
 import re
 import unicodedata
@@ -25,6 +26,8 @@ from datetime import datetime, timezone
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -590,7 +593,7 @@ def map_columns(
                         ))
                         continue
                 except Exception as llm_err:
-                    print(f"  WARNING: LLM disambiguation failed for '{src_col}': {llm_err}")
+                    logger.warning("LLM disambiguation failed for %r: %s", src_col, llm_err)
 
             results.append(MappingResult(
                 lineage_id=lineage_id,
@@ -640,7 +643,7 @@ def map_columns(
                     ))
                     continue
             except Exception as llm_err:
-                print(f"  WARNING: LLM fallback failed for '{src_col}': {llm_err}")
+                logger.warning("LLM fallback failed for %r: %s", src_col, llm_err)
 
         # --- NO MATCH ---
         is_mandatory = False

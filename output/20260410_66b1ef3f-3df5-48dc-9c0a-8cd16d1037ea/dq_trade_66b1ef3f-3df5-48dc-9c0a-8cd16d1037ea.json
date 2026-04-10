@@ -1,0 +1,190 @@
+{
+  "job_id": "66b1ef3f-3df5-48dc-9c0a-8cd16d1037ea",
+  "source_filename": "customers_fuzzy.csv, invoices_fuzzy.csv",
+  "generated_at": "2026-04-10T09:46:04.288073+00:00",
+  "total_exceptions": 1,
+  "exception_summary": {},
+  "tables": {
+    "TRD_CUSTOMER": {
+      "total_rows": 5,
+      "columns": {
+        "Account_Number": {
+          "present": true,
+          "total_rows": 5,
+          "null_count": 0,
+          "fill_rate": 100.0,
+          "mandatory": true,
+          "status": "PASS"
+        },
+        "DUNS_Number": {
+          "present": true,
+          "total_rows": 5,
+          "null_count": 5,
+          "fill_rate": 0.0,
+          "mandatory": false,
+          "status": "FAIL"
+        },
+        "Government_ID": {
+          "present": true,
+          "total_rows": 5,
+          "null_count": 0,
+          "fill_rate": 100.0,
+          "mandatory": false,
+          "status": "PASS"
+        },
+        "Company_Name": {
+          "present": true,
+          "total_rows": 5,
+          "null_count": 0,
+          "fill_rate": 100.0,
+          "mandatory": true,
+          "status": "PASS"
+        },
+        "Country_Code": {
+          "present": true,
+          "total_rows": 5,
+          "null_count": 0,
+          "fill_rate": 100.0,
+          "mandatory": false,
+          "status": "PASS"
+        },
+        "Address_1": {
+          "present": true,
+          "total_rows": 5,
+          "null_count": 0,
+          "fill_rate": 100.0,
+          "mandatory": false,
+          "status": "PASS"
+        },
+        "Address_2": {
+          "present": true,
+          "total_rows": 5,
+          "null_count": 4,
+          "fill_rate": 20.0,
+          "mandatory": false,
+          "status": "FAIL"
+        },
+        "City": {
+          "present": true,
+          "total_rows": 5,
+          "null_count": 0,
+          "fill_rate": 100.0,
+          "mandatory": false,
+          "status": "PASS"
+        },
+        "State": {
+          "present": true,
+          "total_rows": 5,
+          "null_count": 0,
+          "fill_rate": 100.0,
+          "mandatory": false,
+          "status": "PASS"
+        },
+        "Postcode": {
+          "present": true,
+          "total_rows": 5,
+          "null_count": 0,
+          "fill_rate": 100.0,
+          "mandatory": false,
+          "status": "PASS"
+        }
+      }
+    }
+  },
+  "per_file_reports": [
+    {
+      "job_id": "66b1ef3f-3df5-48dc-9c0a-8cd16d1037ea",
+      "source_filename": "customers_fuzzy.csv",
+      "generated_at": "2026-04-10T09:46:04.260462+00:00",
+      "total_exceptions": 0,
+      "exception_summary": {},
+      "tables": {
+        "TRD_CUSTOMER": {
+          "total_rows": 5,
+          "columns": {
+            "Account_Number": {
+              "present": true,
+              "total_rows": 5,
+              "null_count": 0,
+              "fill_rate": 100.0,
+              "mandatory": true,
+              "status": "PASS"
+            },
+            "DUNS_Number": {
+              "present": true,
+              "total_rows": 5,
+              "null_count": 5,
+              "fill_rate": 0.0,
+              "mandatory": false,
+              "status": "FAIL"
+            },
+            "Government_ID": {
+              "present": true,
+              "total_rows": 5,
+              "null_count": 0,
+              "fill_rate": 100.0,
+              "mandatory": false,
+              "status": "PASS"
+            },
+            "Company_Name": {
+              "present": true,
+              "total_rows": 5,
+              "null_count": 0,
+              "fill_rate": 100.0,
+              "mandatory": true,
+              "status": "PASS"
+            },
+            "Country_Code": {
+              "present": true,
+              "total_rows": 5,
+              "null_count": 0,
+              "fill_rate": 100.0,
+              "mandatory": false,
+              "status": "PASS"
+            },
+            "Address_1": {
+              "present": true,
+              "total_rows": 5,
+              "null_count": 0,
+              "fill_rate": 100.0,
+              "mandatory": false,
+              "status": "PASS"
+            },
+            "Address_2": {
+              "present": true,
+              "total_rows": 5,
+              "null_count": 4,
+              "fill_rate": 20.0,
+              "mandatory": false,
+              "status": "FAIL"
+            },
+            "City": {
+              "present": true,
+              "total_rows": 5,
+              "null_count": 0,
+              "fill_rate": 100.0,
+              "mandatory": false,
+              "status": "PASS"
+            },
+            "State": {
+              "present": true,
+              "total_rows": 5,
+              "null_count": 0,
+              "fill_rate": 100.0,
+              "mandatory": false,
+              "status": "PASS"
+            },
+            "Postcode": {
+              "present": true,
+              "total_rows": 5,
+              "null_count": 0,
+              "fill_rate": 100.0,
+              "mandatory": false,
+              "status": "PASS"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

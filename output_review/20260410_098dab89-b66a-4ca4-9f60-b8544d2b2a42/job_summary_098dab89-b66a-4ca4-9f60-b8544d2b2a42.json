@@ -1,0 +1,23 @@
+{
+  "Job_ID": "098dab89-b66a-4ca4-9f60-b8544d2b2a42",
+  "Domain": "trade",
+  "Source_Filename": "invoices_with_issues.csv",
+  "Job_Status": "BLOCKED",
+  "Files_Processed": 1,
+  "Files_Failed": 0,
+  "Total_Source_Rows": 8,
+  "Total_Canonical_Rows_Written": 0,
+  "Total_Exceptions": 0,
+  "Columns_Mapped_Exact": 9,
+  "Columns_Mapped_Fuzzy": 1,
+  "Columns_Mapped_LLM": 0,
+  "Columns_Unmapped": 1,
+  "Mandatory_Columns_Blocked": 1,
+  "Blocked_Mandatory_Details": [
+    "TRD_CUSTOMER.Company_Name"
+  ],
+  "Job_Start_Timestamp": "2026-04-10T09:29:56.440254+00:00",
+  "Job_End_Timestamp": "2026-04-10T09:29:56.484991+00:00",
+  "Config_Version": "1.2",
+  "Canonical_Model_Version": "1.3"
+}

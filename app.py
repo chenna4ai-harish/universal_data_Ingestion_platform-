@@ -45,12 +45,28 @@ from engine.profile_store import (
 
 CONFIG_DIR = os.path.dirname(__file__)
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
-DOMAINS = ["trade"]
+
+def _discover_domains(config_dir: str) -> list[str]:
+    domains_dir = Path(config_dir) / "domains"
+    if not domains_dir.exists():
+        return []
+    domains: list[str] = []
+    for d in domains_dir.iterdir():
+        if not d.is_dir() or d.name.startswith((".", "_")):
+            continue
+        key = d.name
+        if (d / f"{key}_system_config.json").exists() and (d / f"{key}_canonical_model.json").exists():
+            domains.append(key)
+    return sorted(domains)
+
+
+DOMAINS = _discover_domains(CONFIG_DIR) or ["trade"]
+DEFAULT_DOMAIN = "trade" if "trade" in DOMAINS else DOMAINS[0]
 LLM_PROVIDERS = ["None", "Claude", "OpenAI", "Gemini"]
 
 # Load canonical table names at startup so the UI can create the right number of tabs/downloads.
 try:
-    _, _startup_canonical_model, _ = load_config(CONFIG_DIR, DOMAINS[0])
+    _, _startup_canonical_model, _ = load_config(CONFIG_DIR, DEFAULT_DOMAIN)
     CANONICAL_TABLE_NAMES: list[str] = [
         t for t in _startup_canonical_model
         if not t.startswith("_") and isinstance(_startup_canonical_model[t], dict)
@@ -682,12 +698,12 @@ def ui_save_profile(
     )
 
 
-def ui_apply_suggested_profile(partial_fp: str, override_text: str):
+def ui_apply_suggested_profile(partial_fp: str, override_text: str, domain: str):
     """Apply a partial-match profile's overrides into override_text."""
     if not partial_fp:
         return override_text, "<p style='color:#888'>No partial profile to apply.</p>"
     from engine.profile_store import _load_profile
-    profile = _load_profile(CONFIG_DIR, "trade", partial_fp)   # domain passed via closure isn't available here — use default
+    profile = _load_profile(CONFIG_DIR, domain, partial_fp)
     if not profile:
         return override_text, "<p style='color:#c0392b'>Profile not found.</p>"
     profile_overrides = _parse_override_text(
@@ -946,7 +962,7 @@ def build_ui() -> gr.Blocks:
                         )
                         domain_dd = gr.Dropdown(
                             choices=DOMAINS,
-                            value="trade",
+                            value=DEFAULT_DOMAIN,
                             label="Domain",
                         )
                         contributor_id = gr.Textbox(
@@ -1138,7 +1154,7 @@ def build_ui() -> gr.Blocks:
                     "- **No match** → normal fresh analysis."
                 )
                 profiles_table = gr.Dataframe(
-                    value=_profiles_table(DOMAINS[0]),
+                    value=_profiles_table(DEFAULT_DOMAIN),
                     label="Saved profiles (most used first)",
                     interactive=False,
                     wrap=False,
@@ -1258,7 +1274,7 @@ def build_ui() -> gr.Blocks:
         # Apply partial-match profile suggestion
         apply_suggested_btn.click(
             fn=ui_apply_suggested_profile,
-            inputs=[partial_match_fp, override_text],
+            inputs=[partial_match_fp, override_text, domain_dd],
             outputs=[override_text, override_feedback_html],
         ).then(
             fn=lambda: gr.update(visible=False),
