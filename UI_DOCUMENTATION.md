@@ -2,16 +2,21 @@
 
 This document explains the Column Mapper matching method shown in the UI:
 
-`Exact -> Fuzzy -> LLM -> Override -> Propagation`
+`Profile Check -> Exact -> Fuzzy -> LLM -> Override -> Propagation`
 
 ## 1) Where this runs in UI
 
 In `Upload & Run` tab:
 1. Select **one or more files** in the file picker (multi-file supported)
-2. Click `1) Analyze Mapping` — parses all files and builds a combined scorecard with a `Source_File` column identifying which file each row comes from
-3. Review scorecard (`Source_File`, `Source_Column`, `Suggested_Target`, `Match_Method`, `Confidence_Score`)
-4. Optionally apply overrides via dropdown or text box (overrides apply to all files in the batch by source column name)
-5. Click `2) Run Pipeline` — processes all files sequentially under one shared `Job_ID`
+2. Click `1) Analyze Mapping` — parses all files, runs per-file profile check, and builds a combined scorecard with a `Source_File` column identifying which file each row comes from
+3. A **profile banner** appears if a saved profile matched any uploaded file:
+   - Green banner: EXACT MATCH — all columns matched; saved overrides are pre-applied automatically
+   - Amber banner: PARTIAL MATCH — most columns overlapped; click `Apply Suggested` to adopt the saved overrides
+4. Review and edit the scorecard directly in the **Column Mapper Scorecard** table (inline editing — click any `Selected_Target` cell to change it)
+5. Use the **guardrail dropdowns** (`Source Column` + `Target Column`) and `Add Override` button to add a typo-safe override without typing free text
+6. Click `Save Overrides from Scorecard` to commit all inline edits as active overrides, or `Clear All Overrides` to reset
+7. Optionally enter a profile name and click `Save as Profile` to store the current column-set + overrides for automatic reuse on future similar files
+8. Click `2) Run Pipeline` — processes all files sequentially under one shared `Job_ID`
 
 The same mapping engine is used in both Analyze and Run steps.
 
@@ -88,15 +93,20 @@ LLM acceptance:
 
 ### 3.5 User Override
 
-Overrides are parsed from:
-- text box lines in format:
-  - `Source Column = TABLE.Column`
-- dropdown apply/clear actions update the same override text
+Overrides can be applied in two ways:
 
-When override exists for a source column:
-- it is used first
-- `Match_Method = USER OVERRIDE`
-- `Confidence_Score = 100`
+**Inline scorecard editing:**
+- The Column Mapper Scorecard table is directly editable
+- Click any `Selected_Target` cell and type a new target (e.g. `TRD_INVOICE.Invoice_Number`)
+- After editing, click `Save Overrides from Scorecard` — rows where `Selected_Target` differs from `Suggested_Target` become active overrides
+- `Match_Method = USER OVERRIDE`, `Confidence_Score = 100` for those rows
+
+**Guardrail dropdowns:**
+- Use the `Source Column` dropdown (lists all source columns from uploaded files) and `Target Column` dropdown (lists all valid canonical targets) to build an override without free-text entry
+- Click `Add Override` — the mapping is added directly to the active override set
+- Prevents typos and ensures only valid canonical table/column combinations are accepted
+
+When an override exists for a source column it is applied first regardless of the engine's suggestion.
 
 ### 3.6 Shared-key Propagation
 
@@ -104,6 +114,8 @@ After direct mappings are done:
 - configured propagation rules add secondary mappings
 - used for multi-target shared keys (for example `Account_Number` across related tables)
 - propagated rows keep source column and confidence, and set `is_propagated = True`
+
+**Important:** a table only appears in the canonical output if it has at least 2 columns mapped directly (non-propagated) from the source file. A single propagated shared-key column is not sufficient to trigger output for a table. This prevents hollow rows where a customer file inadvertently creates empty invoice rows (or vice versa) purely because a shared key like `Account_Number` propagates across table boundaries.
 
 ## 4) Mandatory threshold and blocking
 
@@ -113,7 +125,8 @@ Mandatory canonical columns are checked against `mandatory_threshold` (default `
 
 Important behaviour (single file):
 - mandatory checks are enforced only for tables actively targeted by the file
-- propagation-only presence does not by itself make a table active
+- a table is considered actively targeted only when it has ≥2 non-propagated columns mapped to it
+- propagation-only presence does not make a table active and does not trigger mandatory checks
 
 Important behaviour (multi-file batch):
 - blocking is evaluated **per file** — one blocked file does not prevent other files from producing output
@@ -124,7 +137,7 @@ Important behaviour (multi-file batch):
 ## 5) How to read scorecard fields
 
 - `Suggested_Target`: engine suggestion (`TABLE.Column` or `UNMAPPED`)
-- `Selected_Target`: suggestion or your override target
+- `Selected_Target`: suggestion or your override target — **this cell is editable directly in the table**
 - `Match_Method`: `EXACT LOOKUP`, `FUZZY MATCH`, `LLM (...)`, `USER OVERRIDE`, `NO MATCH`
 - `Confidence_Score`: numeric score used for threshold decisions
 - `Was_Mandatory`: whether target canonical column is mandatory
@@ -144,6 +157,60 @@ To test fuzzy-heavy behavior:
 When multiple files are uploaded:
 - `Source_File` column in the scorecard identifies which uploaded file each mapping row belongs to
 - the same source column name appearing in two files produces **two separate scorecard rows** (one per file)
-- overrides are matched on `Source_Column` name — if the same column name appears in multiple files, the override applies to all occurrences
+- overrides matched on `Source_Column` name — if the same column name appears in multiple files, the override applies to all occurrences
 - `Files: N` in the analysis message shows how many parsed sub-files were mapped (includes sub-files extracted from ZIPs)
+- profile checks run **per file** — each file's column set is fingerprinted independently, so a profile saved from a 10-column customer file matches that file even when it is uploaded alongside a 12-column invoice file in the same batch
 
+## 8) Mapping Profiles
+
+Profiles store a file's column fingerprint and any overrides you applied, so the same decisions are automatically reused when a similar file arrives in the future.
+
+### 8.1 How profiles are identified
+
+Each file gets a **SHA-256 fingerprint** of its sorted, lowercased column names. Order and case are irrelevant — `Invoice_Date` in column 3 and `invoice_date` in column 7 produce the same fingerprint. File name is not part of the fingerprint.
+
+### 8.2 Match tiers
+
+| Tier | Condition | Behaviour |
+|------|-----------|-----------|
+| EXACT | 100% of columns match | Overrides pre-applied automatically; green banner shown |
+| PARTIAL | ≥70% Jaccard overlap, same column count ±50% | Amber banner shown; click `Apply Suggested` to adopt overrides |
+| NONE | Below threshold | No banner; fresh analysis only |
+
+### 8.3 Saving a profile
+
+1. After running Analyze Mapping, apply any overrides you want to save (inline edits + `Save Overrides from Scorecard`, or guardrail dropdowns + `Add Override`)
+2. Type a name in the **Profile Name** field and click `Save as Profile`
+3. For single-file uploads the profile is saved under the name you typed
+4. For multi-file uploads one profile is saved per distinct file shape — each name is auto-suffixed with the source filename (e.g. `Trade Template — customers.csv`, `Trade Template — invoices.csv`)
+
+### 8.4 Profiles tab (Tab 5)
+
+- Lists all saved profiles: name, column count, times used, last used date
+- Enter a profile name and click `Delete Profile` to remove it
+- `Refresh` reloads the table from disk
+
+### 8.5 Profile storage layout
+
+```
+profiles/
+  trade/
+    index.json          # lightweight index — fingerprint, name, col count, use stats
+    3617d3b4.json       # full profile — column list + overrides dict
+    ae8a1b04.json
+    ...
+```
+
+Index is always loaded for exact lookup (O(1)). Partial scans pre-filter by column count (±50%) so at 1000 profiles only ~10-20 candidates are fully loaded.
+
+### 8.6 CLI / Run Log output
+
+Profile check results appear in the Run Log before mapping begins:
+
+```
+Checking mapping profiles...
+  [PROFILE] EXACT MATCH for 'customers.csv': "Customer Master"
+    Override active: tax_id -> TRD_CUSTOMER.Government_ID
+  [PROFILE] PARTIAL MATCH for 'invoices_v2.csv': "Invoice Template" (12/15 cols matched)
+  [PROFILE] No profile match for 'new_file.csv' — fresh analysis
+```

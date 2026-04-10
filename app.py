@@ -34,6 +34,10 @@ sys.path.insert(0, os.path.dirname(__file__))
 from pipeline import run_pipeline, load_config, load_lookup
 from engine.file_parser import parse_input_file
 from engine.column_mapper import map_columns
+from engine.profile_store import (
+    match_profile, save_profile, increment_use_count,
+    list_profiles, delete_profile, fingerprint as profile_fingerprint,
+)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -41,12 +45,28 @@ from engine.column_mapper import map_columns
 
 CONFIG_DIR = os.path.dirname(__file__)
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
-DOMAINS = ["trade"]
+
+def _discover_domains(config_dir: str) -> list[str]:
+    domains_dir = Path(config_dir) / "domains"
+    if not domains_dir.exists():
+        return []
+    domains: list[str] = []
+    for d in domains_dir.iterdir():
+        if not d.is_dir() or d.name.startswith((".", "_")):
+            continue
+        key = d.name
+        if (d / f"{key}_system_config.json").exists() and (d / f"{key}_canonical_model.json").exists():
+            domains.append(key)
+    return sorted(domains)
+
+
+DOMAINS = _discover_domains(CONFIG_DIR) or ["trade"]
+DEFAULT_DOMAIN = "trade" if "trade" in DOMAINS else DOMAINS[0]
 LLM_PROVIDERS = ["None", "Claude", "OpenAI", "Gemini"]
 
 # Load canonical table names at startup so the UI can create the right number of tabs/downloads.
 try:
-    _, _startup_canonical_model, _ = load_config(CONFIG_DIR, DOMAINS[0])
+    _, _startup_canonical_model, _ = load_config(CONFIG_DIR, DEFAULT_DOMAIN)
     CANONICAL_TABLE_NAMES: list[str] = [
         t for t in _startup_canonical_model
         if not t.startswith("_") and isinstance(_startup_canonical_model[t], dict)
@@ -210,6 +230,7 @@ def _format_override_text(overrides: dict[str, tuple[str, str]]) -> str:
     return "\n".join(lines)
 
 
+
 def _build_llm_override(
     llm_provider: str,
     api_key_input: str | None,
@@ -266,8 +287,10 @@ def _apply_llm_override_to_config(system_cfg: dict, llm_override: dict | None) -
                 system_cfg.setdefault("llm", {})[key] = llm_override[key]
 
 
+
+
 def _canonical_target_options(canonical_model: dict) -> list[str]:
-    """Flatten canonical model business columns into 'TABLE.Column' options."""
+    """Flatten canonical model business columns into 'TABLE.Column' dropdown options."""
     options = []
     for tbl, tdef in canonical_model.items():
         if tbl.startswith("_") or not isinstance(tdef, dict):
@@ -275,6 +298,22 @@ def _canonical_target_options(canonical_model: dict) -> list[str]:
         for col in tdef.get("business_columns", {}):
             options.append(f"{tbl}.{col}")
     return sorted(options)
+
+
+def add_override_from_dropdowns(selected_source: str, selected_target: str, override_text: str):
+    """Validate and add one override from the guardrail dropdowns."""
+    if not selected_source:
+        return override_text, "<p style='color:#c0392b'>Select a source column first.</p>"
+    if not selected_target or "." not in selected_target:
+        return override_text, "<p style='color:#c0392b'>Select a canonical target first.</p>"
+    tbl, col = selected_target.split(".", 1)
+    overrides = _parse_override_text(override_text)
+    overrides[selected_source] = (tbl, col)
+    updated = _format_override_text(overrides)
+    return updated, (
+        f"<p style='color:#1a7a4a'>Override added: <b>{selected_source}</b> → "
+        f"<b>{tbl}.{col}</b>. Re-run <i>Analyze Mapping</i> to reflect in scorecard.</p>"
+    )
 
 
 def _mapping_target_from_result(mapping_result) -> str:
@@ -387,6 +426,7 @@ def analyze_mappings(
             gr.update(choices=[], value=None),
             gr.update(interactive=False),
             "<p style='color:#c0392b'>Analyze step failed. Fix input/config and retry.</p>",
+            gr.update(visible=False, value=""),   # profile_banner
         )
 
     if not parsed_files:
@@ -398,11 +438,97 @@ def analyze_mappings(
             gr.update(choices=[], value=None),
             gr.update(interactive=False),
             "<p style='color:#c0392b'>Analyze step failed. No file available for mapping.</p>",
+            gr.update(visible=False, value=""),   # profile_banner
         )
 
-    rows = []
-    source_columns = set()
+    # ------------------------------------------------------------------
+    # Profile check — per file, not per batch
+    # EXACT match with stored mappings: skip the engine entirely.
+    # EXACT match without mappings (old profile): pre-load overrides only.
+    # PARTIAL match: show suggestion banner, still run engine.
+    # ------------------------------------------------------------------
+    merged_profile_overrides: dict[str, tuple[str, str]] = {}
+    exact_names: list[str] = []
+    partial_match: tuple[str, str, float] | None = None
+    # Rows collected from profile cache (skip engine for these files)
+    cached_rows: list[dict] = []
+    cached_source_columns: set[str] = set()
+    files_needing_engine: list = []   # parsed files not covered by cache
+
     for pf in parsed_files:
+        file_cols = list(pf.dataframe.columns)
+        file_match = match_profile(file_cols, CONFIG_DIR, domain, cfg=system_cfg)
+
+        if file_match.tier == "EXACT" and file_match.profile:
+            profile_overrides_parsed = _parse_override_text(
+                "\n".join(f"{k} = {v}" for k, v in file_match.profile.overrides.items())
+            )
+            merged_profile_overrides = {**merged_profile_overrides, **profile_overrides_parsed}
+            increment_use_count(file_match.profile.fingerprint, CONFIG_DIR, domain)
+            exact_names.append(f"\"{file_match.profile.name}\" ({pf.source_filename})")
+
+            if file_match.profile.mappings:
+                # Full mapping cached — restore scorecard rows, skip engine for this file
+                for row in file_match.profile.mappings:
+                    row_copy = dict(row)
+                    # Stamp with current source filename in case it differs from saved name
+                    row_copy["Source_File"] = pf.source_filename
+                    cached_source_columns.add(row_copy.get("Source_Column", ""))
+                    cached_rows.append(row_copy)
+            else:
+                # Old profile — no cached mappings, fall through to engine
+                files_needing_engine.append(pf)
+
+        elif file_match.tier == "PARTIAL" and file_match.profile:
+            if partial_match is None or file_match.overlap > partial_match[2]:
+                partial_match = (
+                    file_match.profile.fingerprint,
+                    file_match.profile.name,
+                    file_match.overlap,
+                )
+            files_needing_engine.append(pf)
+        else:
+            files_needing_engine.append(pf)
+
+    # Merge: profile overrides base, user overrides on top
+    combined_overrides = {**merged_profile_overrides, **user_overrides}
+
+    if exact_names:
+        user_overrides = combined_overrides
+        override_text_updated = _format_override_text(combined_overrides)
+        names_str = ", ".join(exact_names)
+        total_overrides = len(combined_overrides)
+        skipped = len(parsed_files) - len(files_needing_engine)
+        profile_banner_html = (
+            f"<div style='border-left:4px solid #1a7a4a;background:#f0faf4;"
+            f"padding:8px 12px;border-radius:4px;margin-bottom:6px'>"
+            f"<b style='color:#1a7a4a'>Profile(s) auto-applied:</b> {names_str} "
+            f"&nbsp;|&nbsp; {total_overrides} override(s) loaded"
+            + (f" &nbsp;|&nbsp; mapping engine skipped for {skipped} file(s)" if skipped else "")
+            + f". Scorecard pre-filled — click <b>Run Pipeline</b> directly or adjust below."
+            f"</div>"
+        )
+    elif partial_match:
+        override_text_updated = override_text
+        pct = int(partial_match[2] * 100)
+        profile_banner_html = (
+            f"<div style='border-left:4px solid #b07d00;background:#fffbf0;"
+            f"padding:8px 12px;border-radius:4px;margin-bottom:6px'>"
+            f"<b style='color:#b07d00'>Partial profile match: \"{partial_match[1]}\"</b> "
+            f"&nbsp;|&nbsp; {pct}% column overlap &nbsp;|&nbsp; "
+            f"Use <b>Apply Suggested Profile</b> to load its overrides, or continue with fresh analysis."
+            f"</div>"
+        )
+    else:
+        override_text_updated = override_text
+        profile_banner_html = ""
+
+    # ------------------------------------------------------------------
+    # Run the column mapper — only for files not covered by profile cache
+    # ------------------------------------------------------------------
+    rows = list(cached_rows)
+    source_columns = set(cached_source_columns)
+    for pf in files_needing_engine:
         mapping_results, _ = map_columns(
             source_columns=list(pf.dataframe.columns),
             lookup_table=lookup_table,
@@ -440,61 +566,216 @@ def analyze_mappings(
     target_choices = _canonical_target_options(canonical_model)
 
     blocked_count = int((~mapping_df["Met_Threshold"]).sum()) if not mapping_df.empty else 0
-    analysis_msg = (
-        f"<p style='color:#1a7a4a'><b>Mapping Analysis Completed.</b> "
-        f"Files: {len(parsed_files)}, Columns analyzed: {len(mapping_df)}, "
-        f"Columns below threshold: {blocked_count}."
-        f"</p>"
-    )
+
+    if exact_names:
+        analysis_msg = (
+            f"<p style='color:#1a7a4a'><b>Profile match — analysis complete.</b> "
+            f"Files: {len(parsed_files)}, Columns: {len(mapping_df)}, "
+            f"Below threshold: {blocked_count}.</p>"
+        )
+        completion_msg = (
+            f"<p style='color:#1a7a4a'><b>Profile(s) applied:</b> {names_str} "
+            f"&mdash; {total_overrides} override(s) pre-loaded. "
+            f"Review scorecard and click <b>Run Pipeline</b>.</p>"
+        )
+    else:
+        analysis_msg = (
+            f"<p style='color:#1a7a4a'><b>Mapping Analysis Completed.</b> "
+            f"Files: {len(parsed_files)}, Columns analyzed: {len(mapping_df)}, "
+            f"Columns below threshold: {blocked_count}.</p>"
+        )
+        completion_msg = "<p style='color:#1a7a4a'><b>Step 1 complete.</b> Edit <i>Selected_Target</i> inline or use the guardrail dropdowns below, then run the pipeline.</p>"
+
+    # Partial match fingerprint for "Apply Suggested" button
+    partial_fp = partial_match[0] if partial_match else ""
 
     return (
         analysis_msg,
         mapping_df,
-        gr.update(choices=source_choices, value=source_choices[0] if source_choices else None),
-        gr.update(choices=target_choices, value=target_choices[0] if target_choices else None),
+        gr.update(choices=source_choices, value=None),
+        gr.update(choices=target_choices, value=None),
         gr.update(interactive=True),
-        "<p style='color:#1a7a4a'><b>Step 1 complete.</b> Review mappings and run pipeline.</p>",
+        completion_msg,
+        gr.update(visible=bool(profile_banner_html), value=profile_banner_html),  # profile_banner
+        override_text_updated,   # pre-seeded overrides for EXACT match
+        partial_fp,              # hidden: partial match fingerprint for "Apply Suggested"
     )
 
 
-def apply_mapping_override(
-    selected_source: str,
-    selected_target: str,
+def ui_save_profile(
+    uploaded_file,
+    domain: str,
     override_text: str,
+    profile_name: str,
+    scorecard_df,
 ):
-    """Add/update one override mapping from dropdown editor."""
-    if not selected_source:
-        return override_text, "<p style='color:#c0392b'>Select a source column first.</p>"
-    if not selected_target or "." not in selected_target:
-        return override_text, "<p style='color:#c0392b'>Select a valid canonical target.</p>"
+    """Save current file columns + full mapping scorecard + overrides as a named profile."""
+    if not uploaded_file:
+        return "<p style='color:#c0392b'>Upload a file first before saving a profile.</p>", gr.update()
+    if not profile_name or not profile_name.strip():
+        return "<p style='color:#c0392b'>Enter a profile name before saving.</p>", gr.update()
 
-    tbl, col = selected_target.split(".", 1)
-    overrides = _parse_override_text(override_text)
-    overrides[selected_source] = (tbl, col)
-    updated_text = _format_override_text(overrides)
-    return updated_text, (
-        f"<p style='color:#1a7a4a'>Override set: <b>{selected_source}</b> -> "
-        f"<b>{tbl}.{col}</b>. Re-run Analyze Mapping to refresh scorecard.</p>"
-    )
+    if not isinstance(uploaded_file, list):
+        uploaded_file = [uploaded_file]
+    file_paths = [f if isinstance(f, str) else f.name for f in uploaded_file]
 
+    try:
+        system_cfg, _, _ = load_config(CONFIG_DIR, domain)
+        # Parse each file separately — one profile per distinct file shape
+        per_file_cols: list[tuple[str, list[str]]] = []
+        for fp in file_paths:
+            parsed, _, _ = parse_input_file(file_path=fp, cfg=system_cfg, job_id="PROFILE-SAVE")
+            for pf in parsed:
+                cols = list(pf.dataframe.columns)
+                per_file_cols.append((pf.source_filename, cols))
+    except Exception as e:
+        return f"<p style='color:#c0392b'>Could not read file columns: {e}</p>", gr.update()
 
-def clear_mapping_override(
-    selected_source: str,
-    override_text: str,
-):
-    """Clear override for selected source column."""
-    if not selected_source:
-        return override_text, "<p style='color:#c0392b'>Select a source column first.</p>"
+    # Convert override_text to {source_col: "TABLE.Column"} format
+    parsed_overrides = _parse_override_text(override_text)
+    all_overrides_flat = {src: f"{tbl}.{col}" for src, (tbl, col) in parsed_overrides.items()}
 
-    overrides = _parse_override_text(override_text)
-    if selected_source in overrides:
-        overrides.pop(selected_source, None)
-        updated_text = _format_override_text(overrides)
-        return updated_text, (
-            f"<p style='color:#b07d00'>Override cleared for <b>{selected_source}</b>. "
-            f"Re-run Analyze Mapping to refresh scorecard.</p>"
+    # Convert scorecard dataframe to list of dicts for storage
+    # Group rows by source file so we can attach them to the right per-file profile
+    all_scorecard_rows: list[dict] = []
+    if scorecard_df is not None and not (hasattr(scorecard_df, "empty") and scorecard_df.empty):
+        if isinstance(scorecard_df, pd.DataFrame):
+            all_scorecard_rows = scorecard_df.to_dict(orient="records")
+        elif isinstance(scorecard_df, list):
+            all_scorecard_rows = scorecard_df
+
+    saved_summaries = []
+    for source_filename, cols in per_file_cols:
+        # Only save overrides whose source column actually exists in this file
+        cols_lower = {c.strip().lower() for c in cols}
+        file_overrides = {
+            src: tgt for src, tgt in all_overrides_flat.items()
+            if src.strip().lower() in cols_lower
+        }
+
+        # Filter scorecard rows to this file only
+        file_mappings = [
+            row for row in all_scorecard_rows
+            if row.get("Source_File", "") == source_filename
+        ]
+        # For single-file batches, all rows belong to this file
+        if not file_mappings and len(per_file_cols) == 1:
+            file_mappings = all_scorecard_rows
+
+        # Serialise booleans/numbers for JSON safety
+        clean_mappings = []
+        for row in file_mappings:
+            clean_mappings.append({
+                k: (bool(v) if isinstance(v, (bool,)) else
+                    int(v) if isinstance(v, (int,)) else
+                    float(v) if isinstance(v, (float,)) else
+                    str(v) if v is not None else "")
+                for k, v in row.items()
+            })
+
+        # Name: user-supplied for single file; append filename for multi-file batches
+        pname = (
+            profile_name.strip()
+            if len(per_file_cols) == 1
+            else f"{profile_name.strip()} — {source_filename}"
         )
-    return override_text, "<p style='color:#888'>No override exists for selected source column.</p>"
+        p = save_profile(
+            columns=cols,
+            overrides=file_overrides,
+            name=pname,
+            domain=domain,
+            config_dir=CONFIG_DIR,
+            mappings=clean_mappings,
+        )
+        saved_summaries.append(
+            f"\"{p.name}\" ({len(cols)} cols, {len(clean_mappings)} mapping(s), "
+            f"{len(file_overrides)} override(s), ID: {p.fingerprint[:8]})"
+        )
+
+    return (
+        f"<p style='color:#1a7a4a'><b>Profile(s) saved:</b> {'; '.join(saved_summaries)}</p>",
+        _profiles_table(domain),
+    )
+
+
+def ui_apply_suggested_profile(partial_fp: str, override_text: str, domain: str):
+    """Apply a partial-match profile's overrides into override_text."""
+    if not partial_fp:
+        return override_text, "<p style='color:#888'>No partial profile to apply.</p>"
+    from engine.profile_store import _load_profile
+    profile = _load_profile(CONFIG_DIR, domain, partial_fp)
+    if not profile:
+        return override_text, "<p style='color:#c0392b'>Profile not found.</p>"
+    profile_overrides = _parse_override_text(
+        "\n".join(f"{k} = {v}" for k, v in profile.overrides.items())
+    )
+    existing = _parse_override_text(override_text)
+    merged = {**profile_overrides, **existing}   # existing wins
+    updated = _format_override_text(merged)
+    return updated, (
+        f"<p style='color:#1a7a4a'>Profile \"{profile.name}\" overrides loaded "
+        f"({len(profile.overrides)} override(s)). Re-run <i>Analyze Mapping</i> to reflect.</p>"
+    )
+
+
+def ui_delete_profile(fp: str, domain: str):
+    """Delete a profile by its 8-char short ID."""
+    # Find full fingerprint from index
+    from engine.profile_store import _load_index
+    index = _load_index(CONFIG_DIR, domain)
+    full_fp = next((k for k in index if k.startswith(fp)), None)
+    if not full_fp:
+        return f"<p style='color:#c0392b'>Profile ID \"{fp}\" not found.</p>", _profiles_table(domain)
+    name = index[full_fp].get("name", fp)
+    delete_profile(full_fp, CONFIG_DIR, domain)
+    return f"<p style='color:#b07d00'>Profile \"{name}\" deleted.</p>", _profiles_table(domain)
+
+
+def _profiles_table(domain: str) -> pd.DataFrame:
+    """Build a DataFrame of saved profiles for display."""
+    profiles = list_profiles(CONFIG_DIR, domain)
+    if not profiles:
+        return pd.DataFrame(columns=["ID (8-char)", "Name", "Columns", "Overrides saved", "Uses", "Last Used"])
+    rows = []
+    from engine.profile_store import _load_profile
+    for meta in profiles:
+        fp = meta.get("fingerprint", "")
+        profile = _load_profile(CONFIG_DIR, domain, fp)
+        rows.append({
+            "ID (8-char)": fp[:8],
+            "Name": meta.get("name", "-"),
+            "Columns": meta.get("column_count", "-"),
+            "Overrides saved": len(profile.overrides) if profile else "-",
+            "Uses": meta.get("use_count", 0),
+            "Last Used": meta.get("last_used", "-"),
+        })
+    return pd.DataFrame(rows)
+
+
+def apply_scorecard_overrides(scorecard_df, override_text: str):
+    """Read any edited Selected_Target cells from the scorecard and save as overrides."""
+    if scorecard_df is None or (hasattr(scorecard_df, "empty") and scorecard_df.empty):
+        return override_text, "<p style='color:#888'>No scorecard data to read.</p>"
+
+    overrides = _parse_override_text(override_text)
+    count = 0
+    for _, row in scorecard_df.iterrows():
+        src = str(row.get("Source_Column", "") or "").strip()
+        suggested = str(row.get("Suggested_Target", "") or "").strip()
+        selected = str(row.get("Selected_Target", "") or "").strip()
+        if src and selected and "." in selected and selected != suggested:
+            tbl, col = selected.split(".", 1)
+            overrides[src] = (tbl.strip(), col.strip())
+            count += 1
+
+    updated_text = _format_override_text(overrides)
+    msg = (
+        f"<p style='color:#1a7a4a'><b>{count} override(s) saved.</b> "
+        f"Re-run <i>Analyze Mapping</i> to confirm, or go straight to <i>Run Pipeline</i>.</p>"
+        if count else
+        "<p style='color:#888'>No changes detected — <i>Selected_Target</i> matches suggestions for all rows.</p>"
+    )
+    return updated_text, msg
 
 
 # ---------------------------------------------------------------------------
@@ -681,7 +962,7 @@ def build_ui() -> gr.Blocks:
                         )
                         domain_dd = gr.Dropdown(
                             choices=DOMAINS,
-                            value="trade",
+                            value=DEFAULT_DOMAIN,
                             label="Domain",
                         )
                         contributor_id = gr.Textbox(
@@ -744,32 +1025,66 @@ def build_ui() -> gr.Blocks:
                     analyze_btn = gr.Button("1) Analyze Mapping", variant="secondary", size="lg")
                     run_btn = gr.Button("2) Run Pipeline", variant="primary", size="lg", interactive=False)
 
+                # Hidden state: fingerprint of partial match so "Apply Suggested" can load it
+                partial_match_fp = gr.State(value="")
+
                 completion_banner = gr.HTML("<p style='color:#888'>Analyze mapping, review/adjust, then run pipeline.</p>")
 
                 gr.Markdown("### Step 1 Output - Column Mapper Scorecard")
+
+                # Profile detection banner — shown directly above scorecard so it stays in view
+                profile_banner = gr.HTML(visible=False, value="")
+                gr.Markdown(
+                    "Edit the **Selected_Target** cell for any row to override a mapping, "
+                    "then click **Save Overrides from Scorecard** below. "
+                    "In multi-file batches, overrides apply by column name across all uploaded files."
+                )
                 mapping_analysis_html = gr.HTML("<p style='color:#888'>No mapping analysis yet.</p>")
                 mapping_scorecard = gr.Dataframe(
                     label="Column Mapper (Exact -> Fuzzy -> LLM -> Override -> Propagation)",
-                    interactive=False,
+                    interactive=True,
                     wrap=False,
                 )
+                with gr.Row():
+                    save_overrides_btn = gr.Button("Save Overrides from Scorecard", variant="secondary")
+                    clear_overrides_btn = gr.Button("Clear All Overrides", variant="stop")
+                override_feedback_html = gr.HTML("<p style='color:#888'>No overrides saved yet.</p>")
 
-                gr.Markdown("### Adjust Mapping via Dropdown (optional)")
+                gr.Markdown(
+                    "**Not sure of the exact column name?** Use the guardrail dropdowns — "
+                    "pick a source column and a valid canonical target, then click *Add Override*. "
+                    "This is typo-safe; direct cell editing above is for power users who know the schema."
+                )
                 with gr.Row():
-                    source_col_selector = gr.Dropdown(
-                        choices=[],
-                        label="Source column",
-                        info="Pick a source column from analysis results. In multi-file batches, overrides apply by column name across all uploaded files.",
+                    src_dd = gr.Dropdown(
+                        choices=[], label="Source column",
+                        info="Populated after Analyze Mapping.",
                     )
-                    target_col_selector = gr.Dropdown(
-                        choices=[],
-                        label="Canonical target",
-                        info="Pick canonical mapping as TABLE.Column.",
+                    tgt_dd = gr.Dropdown(
+                        choices=[], label="Canonical target (TABLE.Column)",
+                        info="All valid targets from the canonical model.",
                     )
+                    add_override_btn = gr.Button("Add Override", variant="primary", scale=0)
+
+                # Partial match — only visible when a suggestion exists
+                apply_suggested_btn = gr.Button(
+                    "Apply Suggested Profile Overrides", variant="secondary", visible=False
+                )
+
+                gr.Markdown("---")
+                gr.Markdown("### Save as Profile")
+                gr.Markdown(
+                    "Save current file shape + overrides so next time the same columns "
+                    "arrive, they are auto-applied without needing to re-analyse."
+                )
                 with gr.Row():
-                    apply_override_btn = gr.Button("Apply Selected Override", variant="secondary")
-                    clear_override_btn = gr.Button("Clear Selected Override", variant="secondary")
-                override_feedback_html = gr.HTML("<p style='color:#888'>No override action yet.</p>")
+                    profile_name_input = gr.Textbox(
+                        label="Profile name",
+                        placeholder="e.g. Monthly Invoice Report",
+                        scale=3,
+                    )
+                    save_profile_btn = gr.Button("Save Profile", variant="secondary", scale=1)
+                profile_save_feedback = gr.HTML("<p style='color:#888'>No profile saved yet.</p>")
 
             # ----------------------------------------------------------------
             # TAB 2 - Results
@@ -828,7 +1143,34 @@ def build_ui() -> gr.Blocks:
                 )
 
             # ----------------------------------------------------------------
-            # TAB 5 - Downloads
+            # TAB 5 - Profiles
+            # ----------------------------------------------------------------
+            with gr.Tab("Profiles"):
+                gr.Markdown(
+                    "### Saved Mapping Profiles\n"
+                    "Profiles are matched automatically when you click **Analyze Mapping**.\n\n"
+                    "- **EXACT match** (100% column overlap) → overrides auto-applied, no human needed.\n"
+                    "- **PARTIAL match** (≥70% overlap) → suggestion shown, you decide.\n"
+                    "- **No match** → normal fresh analysis."
+                )
+                profiles_table = gr.Dataframe(
+                    value=_profiles_table(DEFAULT_DOMAIN),
+                    label="Saved profiles (most used first)",
+                    interactive=False,
+                    wrap=False,
+                )
+                with gr.Row():
+                    refresh_profiles_btn = gr.Button("Refresh", variant="secondary", scale=0)
+                    delete_profile_input = gr.Textbox(
+                        label="Delete profile by ID (8-char)",
+                        placeholder="e.g. a3f2b1c4",
+                        scale=2,
+                    )
+                    delete_profile_btn = gr.Button("Delete Profile", variant="stop", scale=0)
+                profiles_feedback = gr.HTML("<p style='color:#888'>-</p>")
+
+            # ----------------------------------------------------------------
+            # TAB 6 - Downloads
             # ----------------------------------------------------------------
             with gr.Tab("Download Outputs"):
                 gr.Markdown("Output files from the last run. Click to download.")
@@ -864,7 +1206,9 @@ def build_ui() -> gr.Blocks:
                 pd.DataFrame(),
                 gr.update(choices=[], value=None),
                 gr.update(choices=[], value=None),
-                "<p style='color:#888'>No override action yet.</p>",
+                "<p style='color:#888'>No overrides saved yet.</p>",
+                gr.update(visible=False, value=""),
+                "",
             ),
             inputs=[file_input],
             outputs=[
@@ -872,13 +1216,15 @@ def build_ui() -> gr.Blocks:
                 completion_banner,
                 mapping_analysis_html,
                 mapping_scorecard,
-                source_col_selector,
-                target_col_selector,
+                src_dd,
+                tgt_dd,
                 override_feedback_html,
+                profile_banner,
+                partial_match_fp,
             ],
         )
 
-        # Step 1: analyze mapping before full pipeline execution
+        # Step 1: analyze mapping — profile check runs first inside this fn
         analyze_btn.click(
             fn=analyze_mappings,
             inputs=[
@@ -895,24 +1241,72 @@ def build_ui() -> gr.Blocks:
             outputs=[
                 mapping_analysis_html,
                 mapping_scorecard,
-                source_col_selector,
-                target_col_selector,
+                src_dd,
+                tgt_dd,
                 run_btn,
                 completion_banner,
+                profile_banner,
+                override_text,
+                partial_match_fp,
             ],
         )
 
-        # Dropdown-driven single override editor
-        apply_override_btn.click(
-            fn=apply_mapping_override,
-            inputs=[source_col_selector, target_col_selector, override_text],
+        # Scorecard inline override editing
+        save_overrides_btn.click(
+            fn=apply_scorecard_overrides,
+            inputs=[mapping_scorecard, override_text],
             outputs=[override_text, override_feedback_html],
         )
 
-        clear_override_btn.click(
-            fn=clear_mapping_override,
-            inputs=[source_col_selector, override_text],
+        clear_overrides_btn.click(
+            fn=lambda: ("", "<p style='color:#b07d00'>All overrides cleared.</p>"),
+            inputs=[],
             outputs=[override_text, override_feedback_html],
+        )
+
+        # Guardrail dropdown override
+        add_override_btn.click(
+            fn=add_override_from_dropdowns,
+            inputs=[src_dd, tgt_dd, override_text],
+            outputs=[override_text, override_feedback_html],
+        )
+
+        # Apply partial-match profile suggestion
+        apply_suggested_btn.click(
+            fn=ui_apply_suggested_profile,
+            inputs=[partial_match_fp, override_text, domain_dd],
+            outputs=[override_text, override_feedback_html],
+        ).then(
+            fn=lambda: gr.update(visible=False),
+            outputs=[apply_suggested_btn],
+        )
+
+        # Show "Apply Suggested" button only when there is a partial match
+        partial_match_fp.change(
+            fn=lambda fp: gr.update(visible=bool(fp)),
+            inputs=[partial_match_fp],
+            outputs=[apply_suggested_btn],
+        )
+
+        # Save profile — pass scorecard so full mappings are stored
+        save_profile_btn.click(
+            fn=ui_save_profile,
+            inputs=[file_input, domain_dd, override_text, profile_name_input, mapping_scorecard],
+            outputs=[profile_save_feedback, profiles_table],
+        )
+
+        # Profiles tab — refresh
+        refresh_profiles_btn.click(
+            fn=lambda domain: _profiles_table(domain),
+            inputs=[domain_dd],
+            outputs=[profiles_table],
+        )
+
+        # Profiles tab — delete
+        delete_profile_btn.click(
+            fn=ui_delete_profile,
+            inputs=[delete_profile_input, domain_dd],
+            outputs=[profiles_feedback, profiles_table],
         )
 
         # Step 2: run full pipeline
@@ -971,3 +1365,4 @@ if __name__ == "__main__":
         theme=UI_THEME,
         css=UI_CSS,
     )
+

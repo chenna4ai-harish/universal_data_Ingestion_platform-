@@ -39,7 +39,7 @@ def write_canonical_tables(
             continue
         filename = f"{prefix}_{tbl.lower()}_{job_id}.csv"
         path = os.path.join(output_dir, filename)
-        df.to_csv(path, index=False)
+        df.to_csv(path, index=False, encoding="utf-8-sig")
         written[tbl] = path
     return written
 
@@ -57,13 +57,7 @@ def write_exceptions(
     prefix = cfg.get("output", {}).get("exceptions_prefix", "exceptions")
     filename = f"{prefix}_{job_id}.csv"
     path = os.path.join(output_dir, filename)
-    max_rows = cfg.get("output", {}).get("max_exceptions_display", 200)
-    if len(exceptions_df) > max_rows:
-        print(
-            f"  WARNING: exceptions CSV truncated to {max_rows} rows "
-            f"({len(exceptions_df)} total). Increase max_exceptions_display in config to capture all."
-        )
-    exceptions_df.head(max_rows).to_csv(path, index=False)
+    exceptions_df.to_csv(path, index=False, encoding="utf-8-sig")
     return path
 
 
@@ -76,7 +70,7 @@ def write_column_lineage(
         return None
     _ensure_output_dir(output_dir)
     path = os.path.join(output_dir, f"column_lineage_{job_id}.csv")
-    column_lineage_df.to_csv(path, index=False)
+    column_lineage_df.to_csv(path, index=False, encoding="utf-8-sig")
     return path
 
 
@@ -89,7 +83,7 @@ def write_archive_lineage(
         return None
     _ensure_output_dir(output_dir)
     path = os.path.join(output_dir, f"archive_lineage_{job_id}.csv")
-    archive_lineage_df.to_csv(path, index=False)
+    archive_lineage_df.to_csv(path, index=False, encoding="utf-8-sig")
     return path
 
 

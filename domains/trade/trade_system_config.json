@@ -82,7 +82,9 @@
       }
     ],
     "llm_disambiguation_required_below": 70,
-    "auto_block_unmapped_mandatory": true
+    "auto_block_unmapped_mandatory": true,
+    "profile_partial_threshold": 0.70,
+    "_profile_partial_threshold_note": "Minimum Jaccard column overlap (0.0-1.0) to surface a partial profile suggestion. 0.70 = 70% overlap required. Set to 1.0 to disable partial matching entirely."
   },
   "quality": {
     "mandatory_threshold": 80,

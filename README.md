@@ -1,5 +1,5 @@
 # Universal Data Ingestion & Normalisation Platform
-**Version:** POC 1.1 | **Domain:** Trade Credit Payments
+**Version:** POC 1.2 | **Domain:** Trade Credit Payments
 
 A config-driven pipeline that ingests contributor files in any format, maps columns to a canonical model using exact/fuzzy/LLM matching, runs data quality checks, and produces standardised outputs with full lineage.
 
@@ -13,12 +13,13 @@ A config-driven pipeline that ingests contributor files in any format, maps colu
 5. [Running the UI (Gradio)](#5-running-the-ui-gradio)
 6. [Running via CLI](#6-running-via-cli)
 7. [Multi-File Batch Ingestion](#7-multi-file-batch-ingestion)
-8. [LLM Configuration](#8-llm-configuration)
-9. [Config Files Reference](#9-config-files-reference)
-10. [Output Files Reference](#10-output-files-reference)
-11. [Testing with Sample Files](#11-testing-with-sample-files)
-12. [Adding a New Domain](#12-adding-a-new-domain)
-13. [Troubleshooting](#13-troubleshooting)
+8. [Mapping Profiles](#8-mapping-profiles)
+9. [LLM Configuration](#9-llm-configuration)
+10. [Config Files Reference](#10-config-files-reference)
+11. [Output Files Reference](#11-output-files-reference)
+12. [Testing with Sample Files](#12-testing-with-sample-files)
+13. [Adding a New Domain](#13-adding-a-new-domain)
+14. [Troubleshooting](#14-troubleshooting)
 
 ---
 
@@ -40,7 +41,8 @@ Data_Ingestion/
 │   ├── column_mapper.py            ← Exact / fuzzy / LLM / override mapping
 │   ├── dq_engine.py                ← Data quality checks
 │   ├── lineage_writer.py           ← Builds lineage & exception DataFrames
-│   └── output_writer.py            ← Writes all output files
+│   ├── output_writer.py            ← Writes all output files
+│   └── profile_store.py            ← Mapping profile save / match / apply
 │
 ├── global_system_tables.json       ← Global system tables (shared by all domains)
 ├── global_prompt.txt               ← Fallback LLM prompt (used when no domain prompt exists)
@@ -52,9 +54,14 @@ Data_Ingestion/
 │       ├── trade_lookup_table.csv      ← 206 source column → canonical mappings
 │       └── trade_prompt.txt            ← Domain-specific LLM prompt (overrides global)
 │
+├── profiles/                       ← Saved mapping profiles (auto-created)
+│   └── trade/
+│       ├── index.json              ← Lightweight index, always loaded
+│       └── <fingerprint8>.json     ← Full profile per file shape
+│
 ├── output/                         ← All job outputs land here (auto-created)
-│   └── <YYYYMMDD>_<job_id>/        ← Per-job subfolder (auto-created)
-├── test_data/                      ← Test files created during development
+│   └── <YYYYMMDD>_<job_id>/        ← Per-job subfolder
+├── test_data/                      ← Test files (CSV, TSV, JSON, XLSX — see §12)
 └── sample_trade_pack_v1/           ← Pre-built sample files for testing
 ```
 
@@ -65,7 +72,13 @@ Data_Ingestion/
 ```
 Uploaded File(s)  ← 1 to N files in a single interaction
       │
-      ▼  (outer loop — one parse call per uploaded file)
+      ▼  Profile check per file (exact/partial/none)
+┌─────────────────┐
+│ profile_store   │  Fingerprints columns, matches saved profiles,
+│                 │  auto-applies overrides on exact match
+└────────┬────────┘
+         │  pre-seeded overrides (or none)
+         ▼  (outer loop — one parse call per uploaded file)
 ┌─────────────────┐
 │   file_parser   │  Detects file type, unpacks ZIPs (nested),
 │                 │  decodes encoding, parses to DataFrame
@@ -80,6 +93,13 @@ Uploaded File(s)  ← 1 to N files in a single interaction
 │                 │  5. Shared-key propagation (Account_Number)
 └────────┬────────┘
          │  MappingResult list + mapping_reference_id
+         ▼
+┌─────────────────┐
+│  direct_tables  │  Only tables with ≥2 directly-mapped columns
+│  filter         │  receive rows — prevents hollow records from
+│                 │  shared-key propagation bleeding across tables
+└────────┬────────┘
+         │
          ▼
 ┌─────────────────┐
 │    dq_engine    │  Mandatory null checks
@@ -111,20 +131,23 @@ Each pipeline run executes these steps (for each uploaded file in batch order):
 | Step | What happens |
 |------|-------------|
 | 1 | Receive one or more uploaded file paths; generate a single `Job_ID` for the batch |
-| 2 | For each file: detect if direct file or ZIP archive |
-| 3 | If ZIP: recursively unpack per safety policy (depth, size, extension, zip-slip) |
-| 4 | Validate each entry: extension + MIME + size + blocked-extension check |
-| 5 | Parse file → normalised DataFrame (CSV/TSV/Excel/JSON/XML/HTML/DOCX/PDF) |
-| 6 | Normalise column names (lowercase, underscores, strip specials) |
-| 7 | Run column mapping pipeline: exact → fuzzy → LLM → override → propagation |
-| 8 | Compute mandatory coverage; **block commit** if mandatory threshold not met |
-| 9 | Project source rows into canonical tables (TRD_CUSTOMER, TRD_INVOICE) |
-| 10 | Run DQ: mandatory nulls, type validation, duplicates, RI, business rules |
-| 11 | Write canonical output CSVs |
-| 12 | Write DQ report JSON |
-| 13 | Write RECORD_EXCEPTIONS CSV |
-| 14 | Write COLUMN_LINEAGE + ARCHIVE_LINEAGE CSVs |
-| 15 | Write JOB_SUMMARY JSON; return status |
+| 2 | **Per-file profile check** — fingerprint column headers, match against `profiles/<domain>/index.json` |
+| 3 | EXACT profile match → pre-seed overrides, log `[PROFILE] EXACT MATCH`, skip manual re-analysis |
+| 4 | For each file: detect if direct file or ZIP archive |
+| 5 | If ZIP: recursively unpack per safety policy (depth, size, extension, zip-slip) |
+| 6 | Validate each entry: extension + MIME + size + blocked-extension check |
+| 7 | Parse file → normalised DataFrame (CSV/TSV/Excel/JSON/XML/HTML/DOCX/PDF) |
+| 8 | Normalise column names (lowercase, underscores, strip specials) |
+| 9 | Run column mapping pipeline: exact → fuzzy → LLM → override → propagation |
+| 10 | Compute `direct_tables` (tables with ≥2 non-propagated columns); skip hollow-row tables |
+| 11 | Compute mandatory coverage; **block commit** if mandatory threshold not met |
+| 12 | Project source rows into canonical tables (TRD_CUSTOMER, TRD_INVOICE) |
+| 13 | Run DQ: mandatory nulls, type validation, duplicates, RI, business rules |
+| 14 | Write canonical output CSVs |
+| 15 | Write DQ report JSON |
+| 16 | Write RECORD_EXCEPTIONS CSV |
+| 17 | Write COLUMN_LINEAGE + ARCHIVE_LINEAGE CSVs |
+| 18 | Write JOB_SUMMARY JSON; return status |
 
 **Job statuses:**
 - `SUCCESS` — all records written, zero exceptions
@@ -150,7 +173,6 @@ pip install -r requirements.txt
 ### (Optional) Configure LLM API keys
 
 ```bash
-# Copy the example env file
 copy .env.example .env       # Windows
 cp .env.example .env         # Mac/Linux
 
@@ -173,14 +195,9 @@ python app.py
 Opens at **http://localhost:7860** in your browser automatically.
 
 ```bash
-# Custom port
-python app.py --port 7861
-
-# Generate a public share link (useful for demos)
-python app.py --share
-
-# Start without opening browser
-python app.py --no-browser
+python app.py --port 7861          # Custom port
+python app.py --share              # Public share link (useful for demos)
+python app.py --no-browser         # Start without opening browser
 ```
 
 ### UI Walkthrough
@@ -189,34 +206,51 @@ python app.py --no-browser
 
 | Field | Description |
 |-------|-------------|
-| Upload file(s) | Drag-drop or browse. Select **one or more files** in a single interaction. Accepts CSV, XLSX, XLS, JSON, XML, TXT, DOCX, PDF, ZIP. All selected files are processed under one `Job_ID`. |
-| Domain | `trade` (more domains can be added via config). One domain applies to all files in the batch. |
-| LLM Provider | `None` / `Claude` / `OpenAI` / `Gemini` — see [LLM Configuration](#8-llm-configuration) |
-| API Key | Appears when a provider is selected. Auto-populated from `.env` if set |
+| Upload file(s) | Drag-drop or browse. Select **one or more files**. Accepts CSV, XLSX, XLS, JSON, XML, TXT, DOCX, PDF, ZIP. All files processed under one `Job_ID`. |
+| Domain | `trade` (more domains added via config). One domain applies to the whole batch. |
+| LLM Provider | `None` / `Claude` / `OpenAI` / `Gemini` |
+| API Key | Appears when a provider is selected. Auto-populated from `.env` if set. |
 | Apply LLM to | `Unmatched only` (recommended) or `All columns` |
 | Advanced Settings | Sliders for mandatory threshold, fuzzy similarity, LLM accept threshold |
-| Column Overrides | Force-map a source column: one per line as `Source Col = TBL.Column`. Overrides apply across all files in the batch. |
+| Column Overrides | Force-map a source column: one per line as `Source Col = TBL.Column`. Applies across all files in the batch. |
 
 **Two-step workflow:**
-1. Click **1) Analyze Mapping** — parses all files and shows a combined scorecard with a `Source_File` column identifying which file each row comes from.
-2. Review and optionally override any mappings, then click **2) Run Pipeline** — processes all files sequentially under the shared `Job_ID`.
+1. Click **1) Analyze Mapping** — checks for a saved profile first; if matched, overrides are pre-seeded automatically. Then parses all files and shows a combined scorecard with a `Source_File` column per row.
+2. Review the scorecard. Edit **Selected_Target** cells inline to override any mapping, or use the guardrail dropdowns for typo-safe selection. Click **2) Run Pipeline**.
+
+**Profile detection banner (appears automatically after Analyze):**
+- Green banner — exact profile match, overrides pre-loaded, pipeline ready immediately
+- Amber banner — partial match (≥70% columns), click "Apply Suggested Profile Overrides" to load, then re-run Analyze
+
+**Adjust Mapping:**
+- Edit `Selected_Target` in the scorecard table directly (power users who know the schema)
+- Use **Source column** + **Canonical target** dropdowns then **Add Override** (typo-safe — only valid targets shown)
+- Click **Save Overrides from Scorecard** to persist inline edits to the override state
+- Click **Clear All Overrides** to reset
+
+**Save as Profile:**
+- After any run, enter a name and click **Save Profile** — one profile per file shape is saved under `profiles/<domain>/`
+- On the next run with matching columns, overrides auto-apply
 
 **Tab 2 — Results**
 - Status badge with job metadata and mapping stats
 - DQ report: fill rates per column, exception breakdown
-- TRD_CUSTOMER preview table
-- TRD_INVOICE preview table
+- TRD_CUSTOMER and TRD_INVOICE preview tables
 - Exceptions table
 
 **Tab 3 — Lineage**
 - Column Lineage: every source column, match method, confidence score, LLM reasoning
-- Archive Lineage: populated when input is a ZIP (extraction path, nested level, status)
+- Archive Lineage: populated when input is a ZIP
 
 **Tab 4 — Run Log**
-- Full pipeline log streamed from the engine
+- Full pipeline log including profile match messages
 
-**Tab 5 — Downloads**
-- TRD_CUSTOMER CSV, TRD_INVOICE CSV, Exceptions CSV, Column Lineage CSV, DQ Report JSON
+**Tab 5 — Profiles**
+- Lists all saved profiles (name, column count, overrides saved, uses, last used)
+- Refresh and delete by 8-char ID
+
+**Tab 6 — Downloads**
+- TRD_CUSTOMER CSV, TRD_INVOICE CSV, Exceptions CSV, Column Lineage CSV, DQ Report JSON, Archive Lineage CSV, Job Summary JSON
 
 ---
 
@@ -243,13 +277,30 @@ python pipeline.py file1.csv file2.xlsx \
 # Force a column mapping (applies to all files in the batch)
 python pipeline.py file.csv --override "Billing Reference=TRD_INVOICE.Invoice_Number"
 
-# Multiple overrides with multiple files
+# Multiple overrides
 python pipeline.py customer.csv invoice.csv \
   --override "Billing Ref=TRD_INVOICE.Invoice_Number" \
   --override "Customer Code=TRD_CUSTOMER.Account_Number"
 ```
 
 **Exit codes:** `0` = SUCCESS or SUCCESS_WITH_EXCEPTIONS, `1` = BLOCKED or FAILED
+
+### Profile log messages in CLI output
+
+Every run logs the profile check result per file:
+
+```
+Checking mapping profiles...
+  [PROFILE] EXACT MATCH for 'invoices_jan.csv': "Monthly Invoice Report"
+            (ID: a3f2b1c4, 7 previous use(s), 2 override(s))
+    Override active: billing_ref -> TRD_INVOICE.Invoice_Number
+    Override active: customer_code -> TRD_CUSTOMER.Account_Number
+
+  [PROFILE] PARTIAL MATCH for 'customers_q2.csv': "Customer Master" (85% overlap)
+            — not auto-applied
+
+  [PROFILE] No profile match for 'new_format.csv' — fresh analysis
+```
 
 ---
 
@@ -260,9 +311,10 @@ Multiple separate files can be uploaded in a single interaction and processed un
 ### How it works
 
 1. **Single `Job_ID`** is generated at the start of the job. Every row in `COLUMN_LINEAGE`, `RECORD_EXCEPTIONS`, `ARCHIVE_LINEAGE`, and `JOB_SUMMARY` references this one ID.
-2. **Files are parsed sequentially** in upload order. Each file goes through `parse_input_file()` independently. ZIP files are extracted as normal.
-3. **Mapping and DQ run per parsed sub-file.** Each file is mapped and quality-checked independently using the same domain config.
-4. **Outputs are unified.** After all files complete, canonical DataFrames are merged via `pd.concat()`, lineage rows are accumulated, and a single set of output artefacts is written to one job folder.
+2. **Files are parsed sequentially** in upload order.
+3. **Mapping and DQ run per parsed sub-file.** Each file is mapped and quality-checked independently.
+4. **Hollow-row prevention.** A file only writes rows to a canonical table if it has ≥2 non-propagated columns mapping to that table. This prevents customer files from writing hollow rows into TRD_INVOICE (and vice versa) via the shared `Account_Number` key.
+5. **Outputs are unified.** After all files complete, canonical DataFrames are merged, lineage rows are accumulated, and a single set of output artefacts is written to one job folder.
 
 ### Unified outputs
 
@@ -275,44 +327,117 @@ Multiple separate files can be uploaded in a single interaction and processed un
 | DQ Report JSON | Merged statistics across all files |
 | Job Summary JSON | Aggregate counts: `Files_Processed`, `Total_Source_Rows`, etc. |
 
-### Job Summary aggregation
-
-`JOB_SUMMARY` fields aggregate across all files:
-
-| Field | Value |
-|-------|-------|
-| `Source_Filename` | Comma-separated list of all uploaded filenames |
-| `Files_Processed` | Total successfully parsed files (including sub-files from ZIPs) |
-| `Files_Failed` | Total files that could not be parsed |
-| `Total_Source_Rows` | Sum of rows from all parsed files |
-| `Columns_Mapped_Exact/Fuzzy/LLM/Unmapped` | Sum across all files per match method |
-
 ### Blocking behaviour (per-file)
 
-Mandatory-column blocking is evaluated **per file**:
 - If one file is blocked, the other files still produce canonical output.
 - `Job_Status = BLOCKED` only if **all** files in the batch are blocked.
-- If some files are blocked but others succeed, `Job_Status = SUCCESS_WITH_EXCEPTIONS`.
+- If some files are blocked but others succeed → `Job_Status = SUCCESS_WITH_EXCEPTIONS`.
 
 ### Edge cases
 
 | Scenario | Behaviour |
 |----------|-----------|
-| One file fails to parse | Logged as failed; remaining files continue; `Job_Status = SUCCESS_WITH_EXCEPTIONS` |
+| One file fails to parse | Logged as failed; remaining files continue |
 | All files fail to parse | `Job_Status = FAILED`; `Files_Processed = 0` |
-| ZIP + flat file together | ZIP extracted (archive lineage written); flat file parsed directly; all sub-files share `Job_ID` |
+| ZIP + flat file together | ZIP extracted (archive lineage written); flat file parsed directly |
 | Same column name in two files | Each file mapped independently; `COLUMN_LINEAGE` rows distinguished by `Source_Filename` |
-| Two files mapping to same canonical table | DataFrames merged via `pd.concat()`; `Source_Filename` preserves row origin |
+| Customer file + invoice file | Each writes rows only to its own target table (≥2 column threshold) |
 
 ### Constraints
 
-- All files in a batch use the **same domain config** (one domain per batch).
-- One **override set** applies to all files (overrides match on source column name).
-- Files are processed **sequentially** (no parallel processing).
+- All files in a batch use the **same domain config**.
+- One **override set** applies to all files (matched on source column name).
+- Files are processed **sequentially**.
 
 ---
 
-## 8. LLM Configuration
+## 8. Mapping Profiles
+
+Profiles eliminate repetitive manual override work. The first time you process a file shape, save a profile. Every subsequent run with matching columns auto-applies your corrections.
+
+### How profiles work
+
+Each file's column headers are **fingerprinted** (SHA-256 of sorted, lowercased column names). This means:
+- Column order doesn't matter — `[invoice_number, account_number]` and `[account_number, invoice_number]` are the same profile
+- Filename doesn't matter — `invoices_jan.csv` and `invoices_feb.csv` with the same columns hit the same profile
+- Case doesn't matter — `Invoice_Number` and `invoice_number` are treated identically
+
+### Directory structure
+
+```
+profiles/
+  trade/
+    index.json          ← tiny index, always in memory — O(1) exact lookup
+    a3f2b1c4.json       ← full profile (loaded only on a match)
+    d7e9f012.json
+  finance/              ← ready when you add a finance domain
+    gl_transactions.json
+```
+
+The `profiles/<domain>/` path follows the same `domain` arg as `domains/<domain>/` — no extra config.
+
+### Three matching tiers
+
+| Tier | Condition | Behaviour |
+|------|-----------|-----------|
+| **EXACT** | Column fingerprint matches 100% | Overrides auto-applied silently. Green banner shown. Pipeline ready immediately — no analysis step needed. |
+| **PARTIAL** | ≥70% column overlap (Jaccard) | Amber banner + "Apply Suggested Profile Overrides" button. Human decides. |
+| **NONE** | Below threshold or no profiles | Normal fresh analysis, no banner. |
+
+### Profile matching is per-file
+
+In a multi-file batch, each file is matched independently:
+- `customers_exact.csv` → matches "Customer Master" profile → auto-applied
+- `invoices_exact.csv` → matches "Monthly Invoice Report" profile → auto-applied
+- Both sets of overrides are merged before the mapper runs
+
+Profiles are also **saved per-file** in a multi-file batch. If you upload two files and save a profile named "Monthly Batch":
+- `Monthly Batch — customers_exact.csv` saved (10 columns)
+- `Monthly Batch — invoices_exact.csv` saved (11 columns)
+
+Each can then be matched independently by future uploads.
+
+### What a profile stores
+
+Only **human corrections** — the overrides you made after seeing the engine's suggestions. The engine still runs its full exact/fuzzy/LLM pipeline on every job. The profile just pre-seeds the corrections so you don't redo them manually.
+
+```json
+{
+  "name": "Monthly Invoice Report",
+  "domain": "trade",
+  "columns": ["account_number", "due_date", "invoice_amount", ...],
+  "overrides": {
+    "billing_ref": "TRD_INVOICE.Invoice_Number",
+    "cust_code": "TRD_CUSTOMER.Account_Number"
+  },
+  "use_count": 7,
+  "created_at": "2026-01-15",
+  "last_used": "2026-04-05"
+}
+```
+
+### How search scales
+
+The `index.json` is a dictionary keyed by fingerprint — exact lookup is O(1) regardless of how many profiles exist. Partial scan uses a column-count pre-filter: if your file has 11 columns, any profile with fewer than 6 or more than 16 is skipped without loading the file. At 1,000 profiles, you load at most 10–20 candidates.
+
+### Saving a profile from the UI
+
+1. Upload files and run **Analyze Mapping**
+2. Make any override corrections
+3. Enter a name in the **Profile name** field
+4. Click **Save Profile**
+
+### Managing profiles
+
+The **Profiles tab** lists all saved profiles sorted by use count. You can refresh the list or delete a profile by its 8-char ID.
+
+### Saving a profile from CLI
+
+Profiles are saved from the UI. CLI runs consume profiles automatically (the profile check runs at startup and logs the result) but do not save new ones.
+
+---
+
+## 9. LLM Configuration
 
 LLM is **disabled by default** (`provider = "None"` in `trade_system_config.json`).
 
@@ -337,124 +462,33 @@ Edit `trade_system_config.json`:
 | Fuzzy match confidence < `llm_disambiguation_required_below` (70) | LLM called to confirm or override |
 | LLM response confidence < `confidence_accept_threshold` (55) | Column falls through to `NO MATCH` |
 
-### LLM Prompt Structure
-
-Prompt templates are loaded from files at runtime. The resolution order is:
-
-| Priority | File | When used |
-|----------|------|-----------|
-| 1st | `domains/<domain>/<domain>_prompt.txt` | Domain-specific prompt — customise per domain |
-| 2nd | `global_prompt.txt` | Shared fallback when no domain prompt exists |
-| 3rd | Built-in default | If neither file is present (no files required) |
-
-This means you can give the trade domain a prompt with trade-specific hints while other domains fall back to the generic prompt — no code changes needed.
-
-The engine sends the resolved prompt to the model for each column that needs LLM resolution. It is the same across all three providers (Claude / OpenAI / Gemini):
-
-```
-You are a data mapping assistant for the trade domain.
-Source column: "billing_ref_no"
-Available canonical columns:
-  - TRD_CUSTOMER.Account_Number
-  - TRD_CUSTOMER.Company_Name
-  - TRD_CUSTOMER.DUNS_Number
-  - TRD_INVOICE.Invoice_Number
-  - TRD_INVOICE.Invoice_Date
-  - TRD_INVOICE.Invoice_Amount
-  ... (all business columns from the canonical model)
-
-Task: identify which canonical column this source column most likely maps to.
-Respond ONLY with valid JSON:
-{"canonical_table": "...", "canonical_column": "...", "confidence": 0-100, "reasoning": "one sentence"}
-If no match, use {"canonical_table": null, "canonical_column": "UNMAPPED", "confidence": 0, "reasoning": "..."}
-```
-
-Key points about the prompt:
-- The **domain name** is injected so the model understands context (trade, insurance, etc.)
-- The **full list of canonical columns** across all tables is always provided — the model picks from this enumerated set, not free-form
-- The model is instructed to return **only valid JSON** with four fields; markdown fences are stripped if the model adds them
-- The `confidence` field (0–100) is **self-reported by the model** — it reflects how certain the model is that the mapping is semantically correct
-
 ### How Confidence Score Works
 
 | Stage | How the score is set |
 |-------|----------------------|
-| Exact lookup | Always `100` (defined in config as `exact_confidence`) |
-| Fuzzy match | `int(similarity_ratio × 100 × 0.91)` — the 0.91 multiplier caps fuzzy at ~91, below exact |
+| Exact lookup | Always `100` |
+| Fuzzy match | `int(similarity_ratio × 100 × 0.91)` — capped at ~91, below exact |
 | LLM | Model self-reports 0–100 in its JSON response |
-| User override | Always `100` |
+| User override / Profile override | Always `100` |
 | No match | `0` |
 
-After an LLM call the engine applies two threshold checks:
+### Supported Models
 
-1. **Accept threshold** (`confidence_accept_threshold`, default 55): if the model returns a score below this, the column is treated as `NO MATCH` even if the model named a target. This guards against low-certainty hallucinations.
-2. **Mandatory threshold** (`mandatory_threshold`, default 80): if a mapped column is mandatory and its confidence is below 80, the record is flagged `LOW_CONFIDENCE_MAPPING` in RECORD_EXCEPTIONS.
-
-The `LLM_Reasoning` field in COLUMN_LINEAGE contains the one-sentence explanation the model provided, allowing reviewers to audit every LLM decision.
-
-### LLM output in lineage
-Every LLM-mapped column gets `Match_Method = "LLM (Claude)"` and a one-sentence `LLM_Reasoning` in the COLUMN_LINEAGE output.
-
-### Supported Models (latest as of 2025)
-
-Configure the model in `domains/trade/trade_system_config.json` under `llm.model`:
-
-| Provider | Tier | Model ID | Input $/1M | Output $/1M |
-|----------|------|----------|-----------|------------|
-| **Claude** | Best | `claude-opus-4-6` | $15.00 | $75.00 |
-| Claude | Balanced | `claude-sonnet-4-6` | $3.00 | $15.00 |
-| Claude | Economy | `claude-haiku-4-5-20251001` | $0.80 | $4.00 |
-| **OpenAI** | Best | `gpt-4o` | $2.50 | $10.00 |
-| OpenAI | Economy | `gpt-4o-mini` | $0.15 | $0.60 |
-| OpenAI | Reasoning | `o3` | $10.00 | $40.00 |
-| **Gemini** | Best | `gemini-2.5-pro` | $1.25 | $10.00 |
-| Gemini | Balanced | `gemini-2.0-flash` | $0.10 | $0.40 |
-| Gemini | Economy | `gemini-2.0-flash-lite` | $0.075 | $0.30 |
-
-> The config ships with the **best** model per provider. Swap to a lower tier to reduce cost with no code change.
-
-### Cost per LLM Call (with lookup context in prompt)
-
-Each call sends ~**1,084 input tokens** (lookup aliases + canonical column list + instructions) and receives ~**80 output tokens** (JSON response).
-
-| Model | Cost per call |
-|-------|-------------|
-| claude-opus-4-6 | $0.02226 |
-| claude-sonnet-4-6 | $0.00445 |
-| claude-haiku-4-5 | $0.00119 |
-| gpt-4o | $0.00351 |
-| gpt-4o-mini | $0.00021 |
-| gemini-2.0-flash | $0.00014 |
-
-> **LLM is only called when a column fails both exact lookup AND fuzzy match.** With 206 lookup entries, well-named files typically trigger 0–3 LLM calls. Most jobs cost $0.00.
-
-### Cost Scenarios (claude-opus-4-6 — worst-case pricing)
-
-| Scenario | Cost |
-|----------|------|
-| Single file, all exact matches (typical) | $0.00 |
-| Single file, 3 novel column names | $0.07 |
-| Single file, worst case 20 columns all need LLM | $0.45 |
-| ZIP with 10 files × 3 LLM calls each | $0.67 |
-| 100 files/day × 3 LLM calls | $6.68/day |
-| 1,000 files/day × 3 LLM calls | $66.78/day |
-| 10,000 files/day × 3 LLM calls | $667.80/day |
-
-For high-volume production, switch to `gemini-2.0-flash` ($0.00014/call) — cost drops **~160×** at comparable quality for this structured mapping task.
-
-### Provider SDKs
-```bash
-pip install anthropic          # Claude
-pip install openai             # OpenAI
-pip install google-generativeai  # Gemini
-```
+| Provider | Tier | Model ID |
+|----------|------|----------|
+| **Claude** | Best | `claude-opus-4-6` |
+| Claude | Balanced | `claude-sonnet-4-6` |
+| Claude | Economy | `claude-haiku-4-5-20251001` |
+| **OpenAI** | Best | `gpt-4o` |
+| OpenAI | Economy | `gpt-4o-mini` |
+| **Gemini** | Best | `gemini-2.5-pro` |
+| Gemini | Balanced | `gemini-2.0-flash` |
 
 ---
 
-## 9. Config Files Reference
+## 10. Config Files Reference
 
 ### `trade_system_config.json`
-Controls all runtime behaviour for the trade domain.
 
 | Section | Key settings |
 |---------|-------------|
@@ -465,7 +499,6 @@ Controls all runtime behaviour for the trade domain.
 | `output` | File name prefixes, preview row counts |
 
 ### `trade_canonical_model.json`
-Defines the target data model for the trade domain.
 
 ```
 TRD_CUSTOMER             TRD_INVOICE
@@ -485,37 +518,19 @@ Postcode                 Invoice_Type
 * = mandatory
 ```
 
-Each table also has `audit_columns` (Record_Status, Record_Version, timestamps, job IDs) and `lineage_columns` (Source_Filename, Source_Row_Index, Mapping_Reference_ID, etc.) — all system-generated.
-
 ### `trade_lookup_table.csv`
 206 rows. Format: `source_variation, canonical_table, canonical_column`
 
-Examples:
-```
-inv_no,TRD_INVOICE,Invoice_Number
-billing_date,TRD_INVOICE,Invoice_Date
-debtor_ref,TRD_CUSTOMER,Account_Number
-gross_amount,TRD_INVOICE,Invoice_Amount
-```
-
-To add a new source variation, just add a row — no code change needed.
-
 ### `global_system_tables.json`
-Defines 4 engine-owned system tables used across all domains:
-- `RECORD_EXCEPTIONS` — one row per DQ failure per source record
-- `COLUMN_LINEAGE` — one row per source column per job
-- `ARCHIVE_LINEAGE` — one row per ZIP entry extracted
-- `JOB_SUMMARY` — one row per pipeline job run
+Defines 4 engine-owned system tables: `RECORD_EXCEPTIONS`, `COLUMN_LINEAGE`, `ARCHIVE_LINEAGE`, `JOB_SUMMARY`.
 
 ---
 
-## 10. Output Files Reference
-
-Each job creates its own subfolder under `./output/`:
+## 11. Output Files Reference
 
 ```
 output/
-└── 20260308_a3f2c1d4-....<job_id>/
+└── 20260308_<job_id>/
     ├── canonical_trade_trd_customer_<job_id>.csv
     ├── canonical_trade_trd_invoice_<job_id>.csv
     ├── exceptions_trade_<job_id>.csv
@@ -525,27 +540,25 @@ output/
     └── job_summary_<job_id>.json
 ```
 
-The subfolder is named `<YYYYMMDD>_<job_id>`, making it easy to sort by date and trace back to a specific run. All files for that job are self-contained inside the folder.
-
 | File | Contents |
 |------|----------|
 | `canonical_trade_trd_customer_<job_id>.csv` | Normalised customer records |
 | `canonical_trade_trd_invoice_<job_id>.csv` | Normalised invoice records |
 | `exceptions_trade_<job_id>.csv` | All record-level DQ failures |
-| `column_lineage_<job_id>.csv` | Full column mapping audit trail — includes `LLM_Reasoning` for LLM-mapped columns |
-| `archive_lineage_<job_id>.csv` | ZIP extraction log (only if input was ZIP) |
-| `dq_trade_<job_id>.json` | DQ report: fill rates, exception counts per table |
-| `job_summary_<job_id>.json` | High-level job outcome: row counts, mapping stats, status |
+| `column_lineage_<job_id>.csv` | Full column mapping audit trail |
+| `archive_lineage_<job_id>.csv` | ZIP extraction log |
+| `dq_trade_<job_id>.json` | DQ report: fill rates, exception counts |
+| `job_summary_<job_id>.json` | Job outcome: row counts, mapping stats, status |
 
 ### Exception types
 | Type | Meaning |
 |------|---------|
 | `MANDATORY_NULL` | A mandatory column is null in a source record |
-| `TYPE_MISMATCH` | Value cannot be parsed to declared type (numeric/date) |
+| `TYPE_MISMATCH` | Value cannot be parsed to declared type |
 | `PARSE_ERROR` | File could not be parsed |
 | `ENCODING_ERROR` | File encoding could not be determined |
 | `ARCHIVE_ERROR` | ZIP entry was blocked or could not be extracted |
-| `UNSUPPORTED_FILE_TYPE` | File extension not supported in POC |
+| `UNSUPPORTED_FILE_TYPE` | File extension not supported |
 | `UNMAPPED_MANDATORY` | Mandatory source column could not be mapped |
 | `LOW_CONFIDENCE_MAPPING` | Mapped but confidence below mandatory threshold |
 | `REFERENTIAL_INTEGRITY_FAIL` | TRD_INVOICE.Account_Number not in TRD_CUSTOMER |
@@ -554,157 +567,94 @@ The subfolder is named `<YYYYMMDD>_<job_id>`, making it easy to sort by date and
 
 ---
 
-## 11. Testing with Sample Files
+## 12. Testing with Sample Files
 
-Sample files are in `sample_trade_pack_v1/`. Each tests a different scenario.
+### test_data/ — generated test files
 
 ```bash
-# Standard CSV — clean data, all columns present
+# All exact column names — clean 2-table batch
+python pipeline.py test_data/customers_exact.csv test_data/invoices_exact.csv --domain trade
+
+# Fuzzy headers — all columns need fuzzy matching
+python pipeline.py test_data/customers_fuzzy.csv test_data/invoices_fuzzy.csv --domain trade
+
+# DQ issues — missing mandatory values, bad dates, unmapped columns
+python pipeline.py test_data/invoices_with_issues.csv --domain trade
+
+# Mixed customer + invoice columns in one file — multi-table mapping
+python pipeline.py test_data/mixed_customers_invoices.csv --domain trade
+
+# Multi-format batch — TSV + JSON
+python pipeline.py test_data/customers_european.tsv test_data/invoices_apac.json --domain trade
+
+# XLSX files
+python pipeline.py test_data/customers_exact.xlsx test_data/invoices_exact.xlsx --domain trade
+```
+
+| Test file | Format | Tests |
+|-----------|--------|-------|
+| `customers_exact.csv` | CSV | All columns exact lookup |
+| `customers_fuzzy.csv` | CSV | Headers like `Cust No`, `Buyer Name`, `ZIP Code` → fuzzy match |
+| `customers_european.tsv` | TSV | European companies, `vat_number`, `municipality` |
+| `invoices_exact.csv` | CSV | All columns exact lookup, 10 rows PAID/OPEN mix |
+| `invoices_fuzzy.csv` | CSV | Headers like `Buyer Acct`, `Gross Amt`, `CCY` → fuzzy |
+| `invoices_with_issues.csv` | CSV | Missing mandatory values, bad date → exceptions |
+| `mixed_customers_invoices.csv` | CSV | Customer + invoice columns in one file |
+| `invoices_apac.json` | JSON | Short aliases (`inv_num`, `acct_no`) → exact lookup |
+| `customers_exact.xlsx` | XLSX | Exact column names |
+| `invoices_exact.xlsx` | XLSX | Exact column names |
+| `invoices_fuzzy_headers.xlsx` | XLSX | Fuzzy headers (`Client No`, `Billing Date`, `Gross Amt`) |
+
+**Suggested multi-file combos:**
+```bash
+# Clean 2-table, no exceptions expected
+python pipeline.py test_data/customers_exact.csv test_data/invoices_exact.csv
+
+# All fuzzy — check scorecard confidence scores (~80-91)
+python pipeline.py test_data/customers_fuzzy.csv test_data/invoices_fuzzy.csv
+
+# Partial-block scenario — expect SUCCESS_WITH_EXCEPTIONS
+python pipeline.py test_data/invoices_exact.csv test_data/invoices_with_issues.csv
+
+# Multi-format batch
+python pipeline.py test_data/customers_european.tsv test_data/invoices_apac.json
+```
+
+### sample_trade_pack_v1/ — pre-built samples
+
+```bash
 python pipeline.py sample_trade_pack_v1/trade_contrib_01_standard.csv --preview
-
-# TSV format
 python pipeline.py sample_trade_pack_v1/trade_contrib_02_tsv.tsv --preview
-
-# Pipe-delimited TXT
-python pipeline.py sample_trade_pack_v1/trade_contrib_03_pipe.txt --preview
-
-# JSON format
-python pipeline.py sample_trade_pack_v1/trade_contrib_05_json.json --preview
-
-# ZIP with nested ZIPs
 python pipeline.py sample_trade_pack_v1/trade_contrib_10_nested_zip.zip --preview
-```
-
-### Quick test via CLI
-```bash
-# Should produce SUCCESS_WITH_EXCEPTIONS (intentional DQ issues in test data)
-python pipeline.py test_data/sample_invoices.csv --preview
-
-# Should unpack ZIP, block .exe, process 2 CSVs
-python pipeline.py test_data/test_batch.zip
-```
-
-### Multi-file batch tests
-
-```bash
-# Two CSVs mapping to different canonical tables — one Job_ID, Files_Processed=2
-python pipeline.py sample_trade_pack_v1/trade_contrib_01_standard.csv \
-                   test_data/sample_invoices.csv --preview
-
-# CSV + TSV together
-python pipeline.py sample_trade_pack_v1/trade_contrib_01_standard.csv \
-                   sample_trade_pack_v1/trade_contrib_02_tsv.tsv --preview
-
-# ZIP + standalone CSV — archive lineage written for ZIP sub-files
-python pipeline.py test_data/test_batch.zip \
-                   test_data/sample_invoices.csv --preview
 ```
 
 **What to verify in multi-file runs:**
 - All `COLUMN_LINEAGE` rows share the same `Job_ID`
 - Each row has the correct `Source_Filename`
 - `JOB_SUMMARY.Files_Processed` equals the number of successfully parsed files
-- Canonical CSVs contain rows from both files merged together
-
-### Expected results for `sample_invoices.csv`
-- Source rows: 5
-- Canonical rows: 10 (5 customer + 5 invoice via shared-key propagation)
-- Exceptions: 3
-  - 1× `MANDATORY_NULL` — row 5 has empty Account_Number
-  - 1× `MANDATORY_NULL` — same row, Account_Number also null in TRD_INVOICE
-  - 1× `BUSINESS_RULE_FAIL` — row 4's Due_Date is before Invoice_Date
+- Canonical CSVs contain rows from all files merged — no hollow rows
 
 ---
 
-## 12. Adding a New Domain
+## 13. Adding a New Domain
 
-No code changes required. Create a domain subfolder with four files (the prompt is optional):
+No code changes required. Create a domain subfolder:
 
 ```
 domains/
 └── insurance/
-    ├── insurance_system_config.json    ← copy trade version, adjust rules
-    ├── insurance_canonical_model.json  ← define your canonical tables
-    ├── insurance_lookup_table.csv      ← source column → canonical mappings
-    └── insurance_prompt.txt            ← (optional) domain-specific LLM prompt
+    ├── insurance_system_config.json
+    ├── insurance_canonical_model.json
+    ├── insurance_lookup_table.csv
+    └── insurance_prompt.txt            ← optional
 ```
 
-**Prompt resolution for the new domain:**
-- If `domains/insurance/insurance_prompt.txt` exists → used for all LLM calls in that domain
-- Otherwise → `global_prompt.txt` at the root is used as the fallback
-- If neither file exists → a built-in default prompt is used (no files required)
+Profiles for the new domain are automatically stored under `profiles/insurance/`.
 
 Then run:
-
 ```bash
 python pipeline.py your_file.csv --domain insurance
 ```
-
-The engine picks up the new config automatically.
-
----
-
-## 13. LLM vs Machine Learning Model — Design Decision
-
-### Why not train a custom ML model for column mapping?
-
-A trained ML classifier (e.g. XGBoost, BERT fine-tune, or a custom embedding model) is an alternative to using an LLM API for the mapping step. Here is a full comparison:
-
----
-
-#### Pros of a Trained ML Model
-
-| Advantage | Detail |
-|-----------|--------|
-| **Zero inference cost** | After training, predictions are free — no per-call API charges |
-| **Low latency** | Local model inference: sub-millisecond per column, vs ~1–3s for an LLM API round-trip |
-| **No internet dependency** | Works fully offline / air-gapped environments |
-| **No vendor lock-in** | No dependency on Anthropic, OpenAI, or Google availability |
-| **Deterministic** | Same input always produces same output once trained |
-
----
-
-#### Cons of a Trained ML Model — Why It Is a Poor Fit Here
-
-| Problem | Why it matters |
-|---------|---------------|
-| **Cold-start / no data** | You need hundreds of labelled examples per canonical column before a model is useful. On day 1 there are none. The LLM approach works immediately. |
-| **Short, cryptic column names** | Column names like `inv_amt_3`, `ref_no_b`, `grss_val` have almost no signal for a text classifier. The LLM reasons about semantics across its full training corpus. |
-| **Long-tail vocabulary** | Each contributor uses unique abbreviations. A 206-row lookup table already covers the known ones. ML models are poor at generalising to unseen abbreviations outside the training set. |
-| **Canonical model changes break the model** | Every time a new canonical column is added (e.g. `Tax_Code`), the ML model must be fully retrained and redeployed. The LLM handles it automatically — just add the column to the JSON config. |
-| **Domain shift requires retraining** | A model trained on trade data learns nothing useful for insurance or healthcare. The LLM generalises across domains out of the box. |
-| **No reasoning / auditability** | An ML classifier gives a probability but no explanation. The LLM fills the `LLM_Reasoning` field with a human-readable sentence — essential for data governance and lineage audits. |
-| **MLOps overhead** | Requires GPU infrastructure, experiment tracking, model versioning, A/B testing pipeline, retraining schedules, drift monitoring. The LLM requires only an API key. |
-| **Training data quality** | Mislabelled training examples corrupt the model silently. LLM behaviour is visible and debuggable via the prompt. |
-| **Context-free prediction** | An ML model sees only the column name string. The LLM sees the column name, the full lookup alias table, all canonical columns, and domain hints simultaneously. |
-
----
-
-#### Why the Current 4-Tier Approach Is Better Than Both Pure ML and Pure LLM
-
-```
-Tier 1 — Exact Lookup       ← handles ~85% of columns, zero cost, deterministic
-Tier 2 — Fuzzy Match        ← handles ~10% of columns, zero cost, fast
-Tier 3 — LLM               ← handles ~5% of truly novel columns, small API cost
-Tier 4 — NO MATCH          ← routes to exception for human review
-```
-
-- **Tier 1 + 2 already cover the vast majority** of real-world columns. The 206-row lookup table was built exactly to capture all known variations. Only genuinely unseen column names reach tier 3.
-- **The LLM is the fallback of last resort**, not the primary mechanism. This keeps costs near zero for typical files.
-- A trained ML model would need to replace all four tiers to justify its complexity. Used only as a tier-3 fallback (exactly where LLM sits today), its accuracy would be *lower* than the LLM's because it lacks world knowledge and training data for rare cases.
-
----
-
-#### When a Trained ML Model Would Make Sense
-
-Only consider training a domain-specific model if **all** of the following are true:
-1. You have **>10,000 labelled column mapping examples** per domain
-2. The canonical model is **stable** (rarely changes)
-3. You need **sub-millisecond inference** at very high scale (millions of files/hour)
-4. You have **strict data sovereignty** requirements prohibiting external API calls
-5. LLM costs at your volume are genuinely unacceptable (e.g. >$10,000/day)
-
-For a POC, and for most production deployments at reasonable scale, the LLM API approach is the correct engineering choice.
 
 ---
 
@@ -715,10 +665,12 @@ For a POC, and for most production deployments at reasonable scale, the LLM API 
 | `ModuleNotFoundError: gradio` | `pip install -r requirements.txt` |
 | `ModuleNotFoundError: anthropic` | `pip install anthropic` |
 | Port 7860 already in use | `python app.py --port 7861` |
-| Job status: BLOCKED | All files in the batch had unresolved mandatory columns. Check the Run Log tab — it lists which mandatory columns failed and how many files were blocked (`X/N files blocked`). Use Column Overrides to force-map them. |
-| Job status: SUCCESS_WITH_EXCEPTIONS (unexpected) | Some files may have been individually blocked. Check `RECORD_EXCEPTIONS` — look for `UNMAPPED_MANDATORY` or `LOW_CONFIDENCE_MAPPING` exceptions and which `Source_Filename` they belong to. |
-| All columns show NO MATCH | Check the source file has a header row. Verify column names are readable. Try enabling LLM for unmatched columns. |
-| ZIP blocked (BLOCKED_ENCRYPTED) | The ZIP is password-protected. Decrypt it before uploading. |
+| Job status: BLOCKED | All files in the batch had unresolved mandatory columns. Check Run Log — it lists which mandatory columns failed. Use Column Overrides or save a profile with the correct overrides. |
+| Job status: SUCCESS_WITH_EXCEPTIONS (unexpected) | Some files may have been individually blocked. Check `RECORD_EXCEPTIONS` for `UNMAPPED_MANDATORY` and which `Source_Filename` they belong to. |
+| All columns show NO MATCH | Check the source file has a header row. Try enabling LLM for unmatched columns. |
+| Profile not matching | The file likely has a different column set. Check the Profiles tab — if column count differs by more than 50%, it won't match. Re-save after adding/removing columns. |
+| Profile matched but overrides not applied | Profile is consumed at Analyze step in the UI. For CLI, user_overrides must be passed via `--override` flags — the log shows `Override active:` for each profile override in use. |
+| ZIP blocked (BLOCKED_ENCRYPTED) | The ZIP is password-protected. Decrypt before uploading. |
 | PDF extraction empty | Install `pdfplumber`: `pip install pdfplumber`. For scanned PDFs: `pip install pytesseract Pillow` |
-| `.env` key not loading | Ensure `.env` is in the same folder as `app.py` / `pipeline.py`. Key format: `ANTHROPIC_API_KEY=sk-ant-...` (no quotes). |
-| FutureWarning on concat | Harmless pandas warning. Does not affect output. |
+| `.env` key not loading | Ensure `.env` is in the same folder as `app.py`. Format: `ANTHROPIC_API_KEY=sk-ant-...` (no quotes). |
+| Hollow rows in canonical output | Fixed in v1.2 — only tables with ≥2 directly-mapped columns receive rows. If you see this in older output, re-run with the current version. |

@@ -329,6 +329,57 @@ def _parse_single_file(
 
 
 # ---------------------------------------------------------------------------
+# Lightweight column-only reader (for profile matching — avoids full parse)
+# ---------------------------------------------------------------------------
+
+def _detect_columns_only(file_path: str, cfg: dict) -> list[str]:
+    """
+    Read just the header row from a file and return the column names.
+    Used by the profile system to fingerprint without loading all data.
+    Falls back to full parse for formats that don't support header-only reads.
+    """
+    path = Path(file_path)
+    ext = path.suffix.lower()
+
+    try:
+        if ext in _TEXT_EXTENSIONS:
+            # Read only 2 rows (header + 1 data row) to detect columns
+            text, _ = _detect_encoding(path.read_bytes(), cfg)
+            import io as _io
+            import csv as _csv
+            reader = _csv.reader(_io.StringIO(text), dialect="excel")
+            header = next(reader, [])
+            return [c.strip() for c in header if c.strip()]
+
+        if ext in _EXCEL_EXTENSIONS:
+            import openpyxl as _openpyxl
+            wb = _openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+            ws = wb.active
+            header = [str(cell.value).strip() for cell in next(ws.iter_rows(max_row=1)) if cell.value]
+            wb.close()
+            return header
+
+        if ext == ".json":
+            import json as _json
+            raw = path.read_bytes()
+            text, _ = _detect_encoding(raw, cfg)
+            data = _json.loads(text)
+            if isinstance(data, list) and data and isinstance(data[0], dict):
+                return list(data[0].keys())
+            if isinstance(data, dict):
+                return list(data.keys())
+
+    except Exception:
+        pass
+
+    # Fallback: full parse, just return column names
+    with open(file_path, "rb") as fh:
+        raw = fh.read()
+    df, _ = _parse_single_file(raw, path.name, cfg)
+    return list(df.columns)
+
+
+# ---------------------------------------------------------------------------
 # ZIP handling
 # ---------------------------------------------------------------------------
 
@@ -362,6 +413,7 @@ def _unpack_zip(
     root_archive: str | None,
     current_depth: int,
     file_count_tracker: list[int],   # mutable counter [total_files_so_far]
+    uncompressed_size_tracker: list[int],  # mutable counter [total_uncompressed_bytes_so_far]
     extract_dir: str,
 ) -> None:
     """Recursively unpack a ZIP, respecting all safety controls."""
@@ -372,8 +424,8 @@ def _unpack_zip(
     max_single_mb = ing.get("max_single_extracted_file_mb", 500)
     block_encrypted = ing.get("block_encrypted_archives", True)
     detect_slip = ing.get("detect_zip_slip", True)
-    quarantine = ing.get("quarantine_failed_entries", True)
     ts = datetime.now(timezone.utc).isoformat()
+    max_total_bytes = max_total_mb * 1024 * 1024
 
     if current_depth > max_depth:
         failed_files.append(FailedFile(
@@ -474,9 +526,28 @@ def _unpack_zip(
             ))
             continue
 
+        # Total uncompressed size check (zip bomb guardrail)
+        projected_total = uncompressed_size_tracker[0] + info.file_size
+        if projected_total > max_total_bytes:
+            archive_lineage_rows.append(ArchiveLineageRow(
+                archive_lineage_id=alid, job_id=job_id,
+                source_filename=os.path.basename(entry_name),
+                parent_archive=zip_filename, root_archive=root_archive or zip_filename,
+                archive_entry_name=entry_name, extracted_path="BLOCKED",
+                nested_level=current_depth, file_size_bytes=info.file_size,
+                extraction_status="BLOCKED_TOTAL_SIZE", insert_timestamp=ts,
+            ))
+            failed_files.append(FailedFile(
+                source_filename=entry_name, exception_type="ARCHIVE_ERROR",
+                reason=f"Exceeded max_uncompressed_size_mb ({max_total_mb}MB) while extracting archive",
+                archive_lineage_id=alid,
+            ))
+            return
+
         # Extract bytes
         try:
             raw = zf.read(entry_name)
+            uncompressed_size_tracker[0] = projected_total
         except Exception as e:
             archive_lineage_rows.append(ArchiveLineageRow(
                 archive_lineage_id=alid, job_id=job_id,
@@ -513,6 +584,7 @@ def _unpack_zip(
                     root_archive=root_archive or zip_filename,
                     current_depth=current_depth + 1,
                     file_count_tracker=file_count_tracker,
+                    uncompressed_size_tracker=uncompressed_size_tracker,
                     extract_dir=extract_dir,
                 )
             else:
@@ -630,6 +702,7 @@ def parse_input_file(
                 root_archive=filename,
                 current_depth=1,
                 file_count_tracker=[0],
+                uncompressed_size_tracker=[0],
                 extract_dir=tmpdir,
             )
         return parsed_files, failed_files, archive_lineage_rows

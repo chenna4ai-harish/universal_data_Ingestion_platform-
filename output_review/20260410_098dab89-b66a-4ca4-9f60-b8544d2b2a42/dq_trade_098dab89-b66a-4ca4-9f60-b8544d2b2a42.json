@@ -1,0 +1,9 @@
+{
+  "job_id": "098dab89-b66a-4ca4-9f60-b8544d2b2a42",
+  "source_filename": "invoices_with_issues.csv",
+  "generated_at": "2026-04-10T09:29:56.472743+00:00",
+  "total_exceptions": 0,
+  "exception_summary": {},
+  "tables": {},
+  "per_file_reports": []
+}
