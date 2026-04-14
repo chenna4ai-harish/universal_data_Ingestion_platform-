@@ -16,6 +16,24 @@ import pytest
 REPO_ROOT = Path(__file__).parent.parent
 TEST_DATA = REPO_ROOT / "test_data"
 CONFIG_DIR = str(REPO_ROOT)
+TMP_ROOT = REPO_ROOT / "output_gen_tests" / "_pytest_tmp"
+
+
+@pytest.fixture(autouse=True)
+def _force_temp_dir(monkeypatch):
+    """
+    Force all temporary directories to be created inside the repo workspace.
+
+    This keeps tests compatible with restricted/sandboxed environments where the
+    system temp directory is not writable.
+    """
+    TMP_ROOT.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("TMPDIR", str(TMP_ROOT))
+    monkeypatch.setenv("TEMP", str(TMP_ROOT))
+    monkeypatch.setenv("TMP", str(TMP_ROOT))
+    tempfile.tempdir = str(TMP_ROOT)
+    yield
+    tempfile.tempdir = None
 
 
 def _run(file_name: str, **kwargs) -> dict:

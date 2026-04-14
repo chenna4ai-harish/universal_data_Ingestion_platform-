@@ -1,0 +1,7 @@
+Obligor Code,Transaction Reference,Transaction Date,Contractual Settlement Deadline,Net Trade Receivable,Remittance Confirmation Date,Settlement Value,Commercial Settlement Terms,AR Document Classification,Functional Currency,Data Snapshot Date
+CUST-601,INV-D07-001,2025-01-12,2025-02-11,135000.00,2025-02-09,135000.00,30 Day Net,Trade Invoice,US Dollar,2025-03-31
+CUST-602,INV-D07-002,2025-01-20,2025-04-20,890000.00,,,90 Day Net,Trade Invoice,British Pound,2025-03-31
+CUST-603,INV-D07-003,2025-02-03,2025-03-05,48500.00,2025-03-03,48500.00,30 Day Net,Trade Invoice,Euro,2025-03-31
+CUST-604,INV-D07-004,2025-01-28,2025-03-29,275000.00,,,60 Day Net,Credit Note,Japanese Yen,2025-03-31
+CUST-605,INV-D07-005,2025-02-10,2025-03-12,62000.00,2025-03-10,62000.00,30 Day Net,Trade Invoice,Swiss Franc,2025-03-31
+CUST-601,INV-D07-006,2025-02-22,2025-03-24,97500.00,,,30 Day Net,Trade Invoice,US Dollar,2025-03-31

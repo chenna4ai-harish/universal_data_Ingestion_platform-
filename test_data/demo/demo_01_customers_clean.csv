@@ -1,0 +1,11 @@
+account_number,company_name,duns_number,government_id,country_code,address_1,address_2,city,state,postcode
+CUST-101,TechCorp Industries Inc,112233445,US-EIN-987654321,US,1600 Innovation Drive,Suite 500,San Francisco,CA,94105
+CUST-102,Global Metals & Mining Ltd,223344556,GB-VAT-123456789,GB,30 Finsbury Square,Floor 8,London,England,EC2A 1AG
+CUST-103,Pharma Solutions GmbH,334455667,DE-VAT-987654321,DE,Industriestrasse 22,,Munich,Bavaria,80331
+CUST-104,Pacific Retail Group,445566778,,AU,Level 12 200 Queen Street,,Melbourne,VIC,3000
+CUST-105,Nordic Logistics AB,556677889,SE-VAT-556677889,SE,Kungsgatan 40,,Stockholm,Stockholms Lan,11122
+CUST-106,Meridian Construction LLC,667788990,US-EIN-112233445,US,500 Industrial Parkway,,Houston,TX,77002
+CUST-107,Azure Capital Partners,778899001,US-EIN-334455667,US,One Liberty Plaza,Floor 35,New York,NY,10006
+CUST-108,Precision Engineering Co,889900112,,SG,8 Jurong Town Hall Road,,Singapore,,609434
+CUST-109,Southern Agri Holdings,900011223,ZA-TIN-998877665,ZA,12 Market Square,,Johannesburg,Gauteng,2001
+CUST-110,Atlantic Media Group,011122334,US-EIN-556677889,US,1500 K Street NW,Suite 900,Washington,DC,20005

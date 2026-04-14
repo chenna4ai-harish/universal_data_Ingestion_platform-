@@ -1,0 +1,8 @@
+[
+  {"acct_no": "CUST-301", "inv_num": "INV-D04D-001", "inv_date": "2025-01-18", "due_dt": "2025-02-17", "inv_amt": 34500.00, "pmt_terms": "Net 30", "inv_type": "OPEN", "ccy": "USD", "doe": "2025-03-31"},
+  {"acct_no": "CUST-302", "inv_num": "INV-D04D-002", "inv_date": "2025-01-22", "due_dt": "2025-04-22", "inv_amt": 178000.00, "paid_dt": "2025-04-19", "paid_amt": 178000.00, "pmt_terms": "Net 90", "inv_type": "PAID", "ccy": "EUR", "doe": "2025-03-31"},
+  {"acct_no": "CUST-303", "inv_num": "INV-D04D-003", "inv_date": "2025-02-01", "due_dt": "2025-03-03", "inv_amt": 7800.00, "paid_dt": "2025-03-01", "paid_amt": 7800.00, "pmt_terms": "Net 30", "inv_type": "PAID", "ccy": "GBP", "doe": "2025-03-31"},
+  {"acct_no": "CUST-304", "inv_num": "INV-D04D-004", "inv_date": "2025-02-14", "due_dt": "2025-03-16", "inv_amt": 55000.00, "pmt_terms": "Net 30", "inv_type": "OPEN", "ccy": "CAD", "doe": "2025-03-31"},
+  {"acct_no": "CUST-305", "inv_num": "INV-D04D-005", "inv_date": "2025-01-28", "due_dt": "2025-02-27", "inv_amt": 29500.00, "paid_dt": "2025-02-25", "paid_amt": 29500.00, "pmt_terms": "Net 30", "inv_type": "PAID", "ccy": "AUD", "doe": "2025-03-31"},
+  {"acct_no": "CUST-301", "inv_num": "INV-D04D-006", "inv_date": "2025-03-05", "due_dt": "2025-04-04", "inv_amt": 41200.00, "pmt_terms": "Net 30", "inv_type": "OPEN", "ccy": "USD", "doe": "2025-03-31"}
+]
