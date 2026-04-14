@@ -1,2 +1,0 @@
-﻿Exception_ID,Job_ID,Domain,Source_Filename,Source_Row_Index,Source_Column_Name,Canonical_Table,Canonical_Column,Raw_Value,Exception_Type,Reason,Insert_Timestamp
-b6ce5363-4c25-4a4a-be5c-d2749578021e,f4eb7ad1-4e33-4f78-bb4d-38b10df079b9,trade,invoices_fuzzy.csv,,Gross Amt,TRD_INVOICE,Invoice_Amount,,LOW_CONFIDENCE_MAPPING,Source column 'Gross Amt' mapped to TRD_INVOICE.Invoice_Amount with confidence 78 (threshold 80),2026-04-10T09:41:13.198926+00:00

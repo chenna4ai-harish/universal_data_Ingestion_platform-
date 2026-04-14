@@ -1,0 +1,9 @@
+account_number,company_name,duns_number,government_id,country_code,address_1,address_2,city,state,postcode
+CUST-201,Apex Financial Services,122334455,US-EIN-778899001,US,575 Fifth Avenue,Floor 22,New York,NY,10017
+CUST-202,Berliner Handel GmbH,233445566,DE-VAT-223344556,DE,Friedrichstrasse 100,,Berlin,Berlin,10117
+CUST-203,Osaka Trade Corporation,344556677,,JP,2-3-1 Namba,,Osaka,,542-0076
+CUST-204,Helvetia Precision AG,455667788,CH-VAT-456789012,CH,Bahnhofstrasse 20,,Zurich,,8001
+CUST-205,Copenhagen Shipping AS,566778899,DK-CVR-12345678,DK,Havnegade 5,,Copenhagen,,1058
+CUST-206,Rio Industrial SA,677889900,BR-CNPJ-12345678901234,BR,Avenida Paulista 1000,Andar 15,Sao Paulo,SP,01310-100
+CUST-207,Mumbai Trading House Pvt Ltd,788990011,IN-GSTIN-27AABCT3518Q1ZV,IN,Nariman Point Tower,,Mumbai,Maharashtra,400021
+CUST-208,Monterrey Manufacturing SA,899001122,MX-RFC-MMF901231AB9,MX,Av. Constitucion 450,,Monterrey,Nuevo Leon,64000

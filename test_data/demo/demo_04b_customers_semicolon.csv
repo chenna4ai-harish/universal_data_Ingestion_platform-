@@ -1,0 +1,6 @@
+account_number;company_name;duns_number;government_id;country_code;address_1;city;state;postcode
+CUST-301;Pinnacle Ventures GmbH;102938475;DE-VAT-102938475;DE;Maximilianstrasse 15;Frankfurt;Hesse;60313
+CUST-302;Iberian Trade SL;203847561;ES-VAT-B12345678;ES;Gran Via 45;Madrid;Community of Madrid;28013
+CUST-303;Edinburgh Capital Plc;304756092;GB-VAT-304756092;GB;Charlotte Square 4;Edinburgh;Scotland;EH2 4DR
+CUST-304;Ontario Resources Corp;405865103;CA-HST-405865103;CA;100 King Street West;Toronto;Ontario;M5X 1A9
+CUST-305;Sydney Commodities Pty;506974214;;AU;200 George Street;Sydney;NSW;2000

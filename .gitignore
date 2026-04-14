@@ -7,3 +7,16 @@ Data/
 .data/
 .env
 
+# Python
+__pycache__/
+*.pyc
+
+# Pytest
+.pytest_cache/
+
+# Generated outputs
+output/
+output_*/
+output_review*/
+output_gen_tests/
+

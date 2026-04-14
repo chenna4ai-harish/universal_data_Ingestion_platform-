@@ -398,10 +398,13 @@ def run_pipeline(
         from engine.file_parser import _detect_columns_only
         _log("\nChecking mapping profiles...")
         for fp in file_paths:
+            fname = os.path.basename(fp)
+            if fname.lower().endswith(".zip"):
+                _log(f"  [PROFILE] Check skipped for '{fname}' — archives are checked after extraction")
+                continue
             try:
                 cols = _detect_columns_only(fp, system_cfg)
                 pm = match_profile(cols, config_dir, domain, cfg=system_cfg)
-                fname = os.path.basename(fp)
                 if pm.tier == "EXACT" and pm.profile:
                     _log(f"  [PROFILE] EXACT MATCH for '{fname}': "
                          f"\"{pm.profile.name}\" "
