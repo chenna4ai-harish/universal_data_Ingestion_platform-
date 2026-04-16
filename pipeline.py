@@ -108,6 +108,53 @@ def load_lookup(config_dir: str, domain: str) -> dict:
     return load_lookup_table(path)
 
 
+def validate_config(system_cfg: dict, canonical_model: dict) -> None:
+    """Validate critical config fields before the pipeline runs.
+
+    Raises:
+        ValueError: with a descriptive message if any required field is missing
+            or has an invalid value.
+    """
+    # --- system config ---
+    matching = system_cfg.get("matching")
+    if not isinstance(matching, dict):
+        raise ValueError("system_config missing 'matching' section")
+
+    quality = system_cfg.get("quality")
+    if not isinstance(quality, dict):
+        raise ValueError("system_config missing 'quality' section")
+
+    mandatory_threshold = quality.get("mandatory_threshold")
+    if mandatory_threshold is None:
+        raise ValueError("system_config.quality.mandatory_threshold is required")
+    if not (0 <= float(mandatory_threshold) <= 100):
+        raise ValueError(
+            f"system_config.quality.mandatory_threshold must be 0-100, got {mandatory_threshold}"
+        )
+
+    llm = system_cfg.get("llm", {})
+    provider = llm.get("provider", "None")
+    if provider not in ("None", "Claude", "OpenAI", "Gemini"):
+        raise ValueError(
+            f"system_config.llm.provider must be one of None/Claude/OpenAI/Gemini, got '{provider}'"
+        )
+
+    # --- canonical model ---
+    tables_found = [
+        k for k, v in canonical_model.items()
+        if not k.startswith("_") and isinstance(v, dict)
+    ]
+    if not tables_found:
+        raise ValueError("canonical_model defines no tables (all keys start with '_' or are non-dict)")
+
+    for tbl in tables_found:
+        tdef = canonical_model[tbl]
+        if "business_columns" not in tdef:
+            raise ValueError(f"canonical_model.{tbl} is missing 'business_columns'")
+        if not isinstance(tdef["business_columns"], dict):
+            raise ValueError(f"canonical_model.{tbl}.business_columns must be a dict")
+
+
 # ---------------------------------------------------------------------------
 # Canonical record builder
 # ---------------------------------------------------------------------------
@@ -123,11 +170,29 @@ def _build_canonical_tables(
     job_id: str,
     direct_tables: set[str] | None = None,
 ) -> tuple[dict[str, pd.DataFrame], dict[str, dict[str, str]]]:
-    """
-    Project source DataFrame rows into canonical tables based on mapping results.
+    """Project source DataFrame rows into one or more canonical tables.
 
-    Returns (canonical_tables_dict, source_col_maps_dict).
-    source_col_maps: {canonical_table: {canonical_col -> source_col_name}}
+    Args:
+        df: Parsed source DataFrame.
+        column_map: Output of :func:`build_column_map` — maps each source column
+            to a list of ``(canonical_table, canonical_column, confidence)`` tuples.
+        canonical_model: Full canonical model dict loaded from config.
+        mapping_reference_id: UUID shared by all rows produced from this mapping pass.
+        source_filename: Original filename stamped into each canonical row.
+        source_contributor_id: Contributor identifier for the lineage columns.
+        source_file_format: Detected file format string (e.g. ``"csv"``, ``"xlsx"``).
+        job_id: Current job UUID.
+        direct_tables: When provided, only tables in this set receive rows.
+            Tables that only have columns from shared-key propagation (not direct
+            source mappings) are excluded to prevent hollow records — for example,
+            a customer file should not write rows into ``TRD_INVOICE`` just because
+            ``Account_Number`` propagated there.  Computed by ``_process_parsed_file``
+            as tables with ≥2 non-propagated mapped columns.
+
+    Returns:
+        Tuple of:
+        - ``canonical_tables``: ``{table_name: DataFrame}`` with business + lineage + audit columns.
+        - ``source_col_maps``: ``{table_name: {canonical_col -> source_col}}`` used by the DQ engine.
     """
     ts = datetime.now(timezone.utc).isoformat()
 
@@ -352,7 +417,8 @@ def run_pipeline(
     try:
         system_cfg, canonical_model, global_tables = load_config(config_dir, domain)
         lookup_table = load_lookup(config_dir, domain)
-    except FileNotFoundError as e:
+        validate_config(system_cfg, canonical_model)
+    except (FileNotFoundError, ValueError) as e:
         _log(f"CONFIG ERROR: {e}")
         return {"Job_ID": job_id, "Job_Status": "FAILED", "Reason": str(e)}
 
@@ -459,7 +525,7 @@ def run_pipeline(
     if not parsed_files:
         _log("\nNo files could be parsed. Job FAILED.")
         failed_excs = build_failed_file_exceptions(failed_files, job_id, domain)
-        exc_df = build_record_exceptions_df([], failed_excs)
+        exc_df = build_record_exceptions_df(failed_files_exceptions=failed_excs)
         arch_df = build_archive_lineage_df(archive_lineage_rows)
         exc_path = write_exceptions(exc_df, output_dir, system_cfg, job_id)
         arch_path = write_archive_lineage(arch_df, output_dir, job_id)
@@ -473,6 +539,7 @@ def run_pipeline(
             mapping_results=[], blocked_mandatory=[],
             job_start=job_start, cfg=system_cfg,
             canonical_model_version=canonical_model_version,
+            all_exceptions=failed_excs,
         )
         write_job_summary(summary, output_dir, job_id)
         return summary
@@ -539,7 +606,7 @@ def run_pipeline(
     _log("\nBuilding lineage...")
     column_lineage_df = build_column_lineage_df(all_mapping_results)
     archive_lineage_df = build_archive_lineage_df(archive_lineage_rows)
-    exceptions_df = build_record_exceptions_df(all_exceptions)
+    exceptions_df = build_record_exceptions_df(dq_exceptions=all_exceptions)
 
     # --- Merge DQ reports ---
     merged_dq = {
@@ -631,6 +698,7 @@ def run_pipeline(
         job_start=job_start,
         cfg=system_cfg,
         canonical_model_version=canonical_model_version,
+        all_exceptions=all_exceptions,
     )
     summary_path = write_job_summary(summary, output_dir, job_id)
 
