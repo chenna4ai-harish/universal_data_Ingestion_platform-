@@ -23,6 +23,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Literal
@@ -126,8 +127,14 @@ def _load_index(config_dir: str, domain: str) -> dict[str, dict]:
 def _save_index(config_dir: str, domain: str, index: dict[str, dict]) -> None:
     path = _index_path(config_dir, domain)
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as fh:
-        json.dump(index, fh, indent=2)
+    # Write to a temp file first, then atomically replace — prevents corruption
+    # if the process is killed mid-write.
+    dir_ = os.path.dirname(path)
+    with tempfile.NamedTemporaryFile("w", dir=dir_, suffix=".tmp",
+                                     delete=False, encoding="utf-8") as tmp:
+        json.dump(index, tmp, indent=2)
+        tmp_path = tmp.name
+    os.replace(tmp_path, path)
 
 
 # ---------------------------------------------------------------------------
@@ -147,8 +154,13 @@ def _load_profile(config_dir: str, domain: str, fp: str) -> Profile | None:
 def _save_profile(config_dir: str, domain: str, profile: Profile) -> None:
     path = _profile_path(config_dir, domain, profile.fingerprint)
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as fh:
-        json.dump(profile.__dict__, fh, indent=2)
+    # Write to a temp file first, then atomically replace.
+    dir_ = os.path.dirname(path)
+    with tempfile.NamedTemporaryFile("w", dir=dir_, suffix=".tmp",
+                                     delete=False, encoding="utf-8") as tmp:
+        json.dump(profile.__dict__, tmp, indent=2)
+        tmp_path = tmp.name
+    os.replace(tmp_path, path)
 
 
 # ---------------------------------------------------------------------------
@@ -202,11 +214,16 @@ def match_profile(
         # Quick filter: skip if column counts are too far apart
         if abs(saved_count - incoming_count) > max(incoming_count * 0.5, 3):
             continue
-        # Load profile to get actual column list
-        profile = _load_profile(config_dir, domain, saved_fp)
-        if not profile:
-            continue
-        saved_set = {c.strip().lower() for c in profile.columns}
+        # Use column list from index if available (avoids loading full profile file)
+        saved_cols = meta.get("columns")
+        if saved_cols is not None:
+            saved_set = set(saved_cols)   # already lowercased at save time
+        else:
+            # Fall back to loading the full profile (old profiles without "columns" in index)
+            profile = _load_profile(config_dir, domain, saved_fp)
+            if not profile:
+                continue
+            saved_set = {c.strip().lower() for c in profile.columns}
         intersection = len(incoming_set & saved_set)
         union = len(incoming_set | saved_set)
         overlap = intersection / union if union else 0.0
@@ -284,12 +301,14 @@ def save_profile(
 
     _save_profile(config_dir, domain, profile)
 
-    # Update index
+    # Update index — store column list so partial-scan can compare without
+    # loading the full profile file (O(1) I/O per candidate instead of O(n)).
     index = _load_index(config_dir, domain)
     index[fp] = {
         "fingerprint": fp,
         "name": profile.name,
         "column_count": len(profile.columns),
+        "columns": profile.columns,   # already sorted + lowercased
         "use_count": profile.use_count,
         "last_used": now,
     }

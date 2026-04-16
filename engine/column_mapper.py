@@ -19,6 +19,7 @@ import json
 import logging
 import os
 import re
+import time
 import unicodedata
 import uuid
 from dataclasses import dataclass, field
@@ -344,18 +345,46 @@ def _llm_map(
     prompt_template: str,
     lookup_context: str,
 ) -> tuple[str | None, str | None, int, str, str]:
-    """Dispatch to configured LLM. Returns (table, col, confidence, reasoning, method_label)."""
+    """Dispatch to configured LLM with exponential-backoff retry.
+
+    Retries up to 2 times on transient errors (rate limits, timeouts, network
+    hiccups) with 1 s delay before retry 1 and 2 s before retry 2.
+    Permanent errors (bad JSON, unknown provider) are raised immediately.
+
+    Returns (table, col, confidence, reasoning, method_label).
+    """
     provider = cfg["llm"].get("provider", "None")
-    if provider == "Claude":
-        t, c, s, r = _llm_map_claude(source_col, canonical_options, cfg, domain, prompt_template, lookup_context)
-        return t, c, s, r, "LLM (Claude)"
-    if provider == "OpenAI":
-        t, c, s, r = _llm_map_openai(source_col, canonical_options, cfg, domain, prompt_template, lookup_context)
-        return t, c, s, r, "LLM (OpenAI)"
-    if provider == "Gemini":
-        t, c, s, r = _llm_map_gemini(source_col, canonical_options, cfg, domain, prompt_template, lookup_context)
-        return t, c, s, r, "LLM (Gemini)"
-    raise ValueError(f"Unknown LLM provider: {provider}")
+    _dispatch = {
+        "Claude": (_llm_map_claude, "LLM (Claude)"),
+        "OpenAI": (_llm_map_openai, "LLM (OpenAI)"),
+        "Gemini": (_llm_map_gemini, "LLM (Gemini)"),
+    }
+    if provider not in _dispatch:
+        raise ValueError(f"Unknown LLM provider: {provider}")
+
+    fn, label = _dispatch[provider]
+    max_retries = 2
+    delays = [1, 2]   # seconds between attempts
+
+    last_err: Exception | None = None
+    for attempt in range(max_retries + 1):
+        try:
+            t, c, s, r = fn(source_col, canonical_options, cfg, domain, prompt_template, lookup_context)
+            return t, c, s, r, label
+        except ValueError:
+            # Bad JSON or other permanent error — don't retry
+            raise
+        except Exception as exc:
+            last_err = exc
+            if attempt < max_retries:
+                delay = delays[attempt]
+                logger.warning(
+                    "LLM call failed for %r (attempt %d/%d), retrying in %ds: %s",
+                    source_col, attempt + 1, max_retries + 1, delay, exc,
+                )
+                time.sleep(delay)
+
+    raise last_err  # type: ignore[misc]
 
 
 # ---------------------------------------------------------------------------

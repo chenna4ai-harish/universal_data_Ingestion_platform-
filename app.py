@@ -130,6 +130,11 @@ def _summary_html(summary: dict) -> str:
         "FAILED": "#7f1e1e",
     }.get(status, "#333")
 
+    narrative = summary.get("Job_Narrative", "")
+    exc_blocking = summary.get("Exceptions_Blocking", 0)
+    exc_dq = summary.get("Exceptions_DataQuality", 0)
+    exc_info = summary.get("Exceptions_Informational", 0)
+
     rows = [
         ("Job ID", summary.get("Job_ID", "-")),
         ("Domain", summary.get("Domain", "-")),
@@ -139,6 +144,9 @@ def _summary_html(summary: dict) -> str:
         ("Files Processed", summary.get("Files_Processed", 0)),
         ("Files Failed", summary.get("Files_Failed", 0)),
         ("Total Exceptions", summary.get("Total_Exceptions", 0)),
+        ("  — Blocking", exc_blocking),
+        ("  — Data Quality", exc_dq),
+        ("  — Informational", exc_info),
         ("Mapped - Exact", summary.get("Columns_Mapped_Exact", 0)),
         ("Mapped - Fuzzy", summary.get("Columns_Mapped_Fuzzy", 0)),
         ("Mapped - LLM", summary.get("Columns_Mapped_LLM", 0)),
@@ -159,10 +167,16 @@ def _summary_html(summary: dict) -> str:
         cols = ", ".join(summary["Blocked_Mandatory_Details"])
         blocked_detail = f"<p style='color:#c0392b;font-size:12px;margin-top:6px'>Blocked: {cols}</p>"
 
+    narrative_html = (
+        f"<p style='font-size:13px;color:#555;margin:8px 0 0;font-style:italic'>{narrative}</p>"
+        if narrative else ""
+    )
+
     return f"""
     <div style='border-left:4px solid {color};padding:12px 16px;background:#fafafa;border-radius:4px'>
-      <div style='font-size:18px;font-weight:700;color:{color};margin-bottom:10px'>{badge}</div>
-      <table>{table_rows}</table>
+      <div style='font-size:18px;font-weight:700;color:{color};margin-bottom:6px'>{badge}</div>
+      {narrative_html}
+      <table style='margin-top:8px'>{table_rows}</table>
       {blocked_detail}
     </div>
     """

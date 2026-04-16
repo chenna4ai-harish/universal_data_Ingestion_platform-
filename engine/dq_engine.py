@@ -13,12 +13,15 @@ Returns (canonical_tables_dict, exceptions_list, dq_report_dict).
 
 from __future__ import annotations
 
+import logging
 import re
 import uuid
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -294,6 +297,126 @@ _RULE_TABLE_DEFAULTS: dict[str, str] = {
     "CURRENCY_ISO4217":     "TRD_INVOICE",
 }
 
+# Full ISO 4217 currency code set — defined once at module level, not per-call
+_ISO4217: frozenset[str] = frozenset({
+    "AED","AFN","ALL","AMD","ANG","AOA","ARS","AUD","AWG","AZN",
+    "BAM","BBD","BDT","BGN","BHD","BIF","BMD","BND","BOB","BRL",
+    "BSD","BTN","BWP","BYN","BZD","CAD","CDF","CHF","CLP","CNY",
+    "COP","CRC","CUP","CVE","CZK","DJF","DKK","DOP","DZD","EGP",
+    "ERN","ETB","EUR","FJD","FKP","GBP","GEL","GHS","GIP","GMD",
+    "GNF","GTQ","GYD","HKD","HNL","HRK","HTG","HUF","IDR","ILS",
+    "INR","IQD","IRR","ISK","JMD","JOD","JPY","KES","KGS","KHR",
+    "KMF","KPW","KRW","KWD","KYD","KZT","LAK","LBP","LKR","LRD",
+    "LSL","LYD","MAD","MDL","MGA","MKD","MMK","MNT","MOP","MRU",
+    "MUR","MVR","MWK","MXN","MYR","MZN","NAD","NGN","NIO","NOK",
+    "NPR","NZD","OMR","PAB","PEN","PGK","PHP","PKR","PLN","PYG",
+    "QAR","RON","RSD","RUB","RWF","SAR","SBD","SCR","SDG","SEK",
+    "SGD","SHP","SLL","SOS","SRD","STN","SVC","SYP","SZL","THB",
+    "TJS","TMT","TND","TOP","TRY","TTD","TWD","TZS","UAH","UGX",
+    "USD","UYU","UZS","VES","VND","VUV","WST","XAF","XCD","XOF",
+    "XPF","YER","ZAR","ZMW","ZWL",
+})
+
+
+# ---------------------------------------------------------------------------
+# Business rule handlers — each takes (tbl_df, tbl_name, null_values,
+# job_id, domain, source_filename) and returns list[dict] of exceptions.
+# Register new rules by adding a function + an entry in _BUSINESS_RULE_HANDLERS.
+# ---------------------------------------------------------------------------
+
+_BusinessRuleHandler = Callable[
+    [pd.DataFrame, str, list[str], str, str, str], list[dict]
+]
+
+
+def _rule_inv_due_ge_inv_date(
+    tbl_df: pd.DataFrame, tbl_name: str, null_values: list[str],
+    job_id: str, domain: str, source_filename: str,
+) -> list[dict]:
+    """Due_Date must be >= Invoice_Date."""
+    rule_id = "INV_DUE_GE_INV_DATE"
+    if "Due_Date" not in tbl_df.columns or "Invoice_Date" not in tbl_df.columns:
+        return []
+    exceptions = []
+    for idx, row in tbl_df.iterrows():
+        due = row.get("Due_Date")
+        inv = row.get("Invoice_Date")
+        if due is None or inv is None:
+            continue
+        if _is_null_value(due, null_values) or _is_null_value(inv, null_values):
+            continue
+        try:
+            if pd.to_datetime(str(due)) < pd.to_datetime(str(inv)):
+                exceptions.append(_make_exception(
+                    job_id, domain, source_filename,
+                    int(idx) + 1, "Due_Date", tbl_name, "Due_Date",
+                    str(due), "BUSINESS_RULE_FAIL",
+                    f"[{rule_id}] Due_Date '{due}' is before Invoice_Date '{inv}'",
+                ))
+        except Exception:
+            continue
+    return exceptions
+
+
+def _rule_paid_le_invoice(
+    tbl_df: pd.DataFrame, tbl_name: str, null_values: list[str],
+    job_id: str, domain: str, source_filename: str,
+) -> list[dict]:
+    """Paid_Amount must be <= Invoice_Amount."""
+    rule_id = "PAID_LE_INVOICE"
+    if "Paid_Amount" not in tbl_df.columns or "Invoice_Amount" not in tbl_df.columns:
+        return []
+    exceptions = []
+    for idx, row in tbl_df.iterrows():
+        paid = row.get("Paid_Amount")
+        total = row.get("Invoice_Amount")
+        if paid is None or total is None:
+            continue
+        if _is_null_value(paid, null_values) or _is_null_value(total, null_values):
+            continue
+        try:
+            paid_f, total_f = float(str(paid)), float(str(total))
+            if paid_f > total_f:
+                exceptions.append(_make_exception(
+                    job_id, domain, source_filename,
+                    int(idx) + 1, "Paid_Amount", tbl_name, "Paid_Amount",
+                    str(paid), "BUSINESS_RULE_FAIL",
+                    f"[{rule_id}] Paid_Amount {paid_f} > Invoice_Amount {total_f}",
+                ))
+        except Exception:
+            continue
+    return exceptions
+
+
+def _rule_currency_iso4217(
+    tbl_df: pd.DataFrame, tbl_name: str, null_values: list[str],
+    job_id: str, domain: str, source_filename: str,
+) -> list[dict]:
+    """Currency must be a valid ISO 4217 code."""
+    rule_id = "CURRENCY_ISO4217"
+    if "Currency" not in tbl_df.columns:
+        return []
+    exceptions = []
+    for idx, val in tbl_df["Currency"].items():
+        if _is_null_value(val, null_values):
+            continue
+        if str(val).upper() not in _ISO4217:
+            exceptions.append(_make_exception(
+                job_id, domain, source_filename,
+                int(idx) + 1, "Currency", tbl_name, "Currency",
+                str(val), "BUSINESS_RULE_FAIL",
+                f"[{rule_id}] '{val}' is not a valid ISO 4217 currency code",
+            ))
+    return exceptions
+
+
+# Registry: add new rule handlers here without touching _check_business_rules.
+_BUSINESS_RULE_HANDLERS: dict[str, _BusinessRuleHandler] = {
+    "INV_DUE_GE_INV_DATE": _rule_inv_due_ge_inv_date,
+    "PAID_LE_INVOICE":      _rule_paid_le_invoice,
+    "CURRENCY_ISO4217":     _rule_currency_iso4217,
+}
+
 
 def _check_business_rules(
     canonical_tables: dict[str, pd.DataFrame],
@@ -302,12 +425,15 @@ def _check_business_rules(
     domain: str,
     source_filename: str,
 ) -> list[dict]:
-    """Evaluate configured business rules.
+    """Evaluate configured business rules via the handler registry.
 
     Each rule resolves its target table via:
       1. rule["table"] key (explicit override in config)
       2. _RULE_TABLE_DEFAULTS map (built-in fallback)
     Rules whose target table is not present in this job are silently skipped.
+    Unknown rule_ids are logged as warnings and skipped (no crash).
+    To add a new rule: write a handler function and register it in
+    _BUSINESS_RULE_HANDLERS — no changes to this function needed.
     """
     rules = cfg.get("quality", {}).get("business_rules", [])
     null_values = cfg.get("quality", {}).get("null_values", [])
@@ -315,6 +441,11 @@ def _check_business_rules(
 
     for rule in rules:
         rule_id = rule["rule_id"]
+        handler = _BUSINESS_RULE_HANDLERS.get(rule_id)
+        if handler is None:
+            logger.warning("Unknown business rule '%s' — skipped. "
+                           "Register a handler in _BUSINESS_RULE_HANDLERS.", rule_id)
+            continue
 
         # Resolve target table — explicit config key wins over built-in default
         tbl_name = rule.get("table") or _RULE_TABLE_DEFAULTS.get(rule_id, "TRD_INVOICE")
@@ -322,80 +453,7 @@ def _check_business_rules(
         if tbl_df is None:
             continue
 
-        if rule_id == "INV_DUE_GE_INV_DATE":
-            if "Due_Date" not in tbl_df.columns or "Invoice_Date" not in tbl_df.columns:
-                continue
-            for idx, row in tbl_df.iterrows():
-                due = row.get("Due_Date")
-                inv = row.get("Invoice_Date")
-                if due is None or inv is None:
-                    continue
-                if _is_null_value(due, null_values) or _is_null_value(inv, null_values):
-                    continue
-                try:
-                    if pd.to_datetime(str(due)) < pd.to_datetime(str(inv)):
-                        exceptions.append(_make_exception(
-                            job_id, domain, source_filename,
-                            int(idx) + 1, "Due_Date", tbl_name, "Due_Date",
-                            str(due), "BUSINESS_RULE_FAIL",
-                            f"[{rule_id}] Due_Date '{due}' is before Invoice_Date '{inv}'",
-                        ))
-                except Exception:
-                    continue
-
-        elif rule_id == "PAID_LE_INVOICE":
-            if "Paid_Amount" not in tbl_df.columns or "Invoice_Amount" not in tbl_df.columns:
-                continue
-            for idx, row in tbl_df.iterrows():
-                paid = row.get("Paid_Amount")
-                total = row.get("Invoice_Amount")
-                if paid is None or total is None:
-                    continue
-                if _is_null_value(paid, null_values) or _is_null_value(total, null_values):
-                    continue
-                try:
-                    paid_f, total_f = float(str(paid)), float(str(total))
-                    if paid_f > total_f:
-                        exceptions.append(_make_exception(
-                            job_id, domain, source_filename,
-                            int(idx) + 1, "Paid_Amount", tbl_name, "Paid_Amount",
-                            str(paid), "BUSINESS_RULE_FAIL",
-                            f"[{rule_id}] Paid_Amount {paid_f} > Invoice_Amount {total_f}",
-                        ))
-                except Exception:
-                    continue
-
-        elif rule_id == "CURRENCY_ISO4217":
-            _ISO4217 = {
-                "AED","AFN","ALL","AMD","ANG","AOA","ARS","AUD","AWG","AZN",
-                "BAM","BBD","BDT","BGN","BHD","BIF","BMD","BND","BOB","BRL",
-                "BSD","BTN","BWP","BYN","BZD","CAD","CDF","CHF","CLP","CNY",
-                "COP","CRC","CUP","CVE","CZK","DJF","DKK","DOP","DZD","EGP",
-                "ERN","ETB","EUR","FJD","FKP","GBP","GEL","GHS","GIP","GMD",
-                "GNF","GTQ","GYD","HKD","HNL","HRK","HTG","HUF","IDR","ILS",
-                "INR","IQD","IRR","ISK","JMD","JOD","JPY","KES","KGS","KHR",
-                "KMF","KPW","KRW","KWD","KYD","KZT","LAK","LBP","LKR","LRD",
-                "LSL","LYD","MAD","MDL","MGA","MKD","MMK","MNT","MOP","MRU",
-                "MUR","MVR","MWK","MXN","MYR","MZN","NAD","NGN","NIO","NOK",
-                "NPR","NZD","OMR","PAB","PEN","PGK","PHP","PKR","PLN","PYG",
-                "QAR","RON","RSD","RUB","RWF","SAR","SBD","SCR","SDG","SEK",
-                "SGD","SHP","SLL","SOS","SRD","STN","SVC","SYP","SZL","THB",
-                "TJS","TMT","TND","TOP","TRY","TTD","TWD","TZS","UAH","UGX",
-                "USD","UYU","UZS","VES","VND","VUV","WST","XAF","XCD","XOF",
-                "XPF","YER","ZAR","ZMW","ZWL",
-            }
-            if "Currency" not in tbl_df.columns:
-                continue
-            for idx, val in tbl_df["Currency"].items():
-                if _is_null_value(val, null_values):
-                    continue
-                if str(val).upper() not in _ISO4217:
-                    exceptions.append(_make_exception(
-                        job_id, domain, source_filename,
-                        int(idx) + 1, "Currency", tbl_name, "Currency",
-                        str(val), "BUSINESS_RULE_FAIL",
-                        f"[{rule_id}] '{val}' is not a valid ISO 4217 currency code",
-                    ))
+        exceptions.extend(handler(tbl_df, tbl_name, null_values, job_id, domain, source_filename))
 
     return exceptions
 
