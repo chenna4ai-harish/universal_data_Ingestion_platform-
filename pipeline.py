@@ -123,11 +123,29 @@ def _build_canonical_tables(
     job_id: str,
     direct_tables: set[str] | None = None,
 ) -> tuple[dict[str, pd.DataFrame], dict[str, dict[str, str]]]:
-    """
-    Project source DataFrame rows into canonical tables based on mapping results.
+    """Project source DataFrame rows into one or more canonical tables.
 
-    Returns (canonical_tables_dict, source_col_maps_dict).
-    source_col_maps: {canonical_table: {canonical_col -> source_col_name}}
+    Args:
+        df: Parsed source DataFrame.
+        column_map: Output of :func:`build_column_map` — maps each source column
+            to a list of ``(canonical_table, canonical_column, confidence)`` tuples.
+        canonical_model: Full canonical model dict loaded from config.
+        mapping_reference_id: UUID shared by all rows produced from this mapping pass.
+        source_filename: Original filename stamped into each canonical row.
+        source_contributor_id: Contributor identifier for the lineage columns.
+        source_file_format: Detected file format string (e.g. ``"csv"``, ``"xlsx"``).
+        job_id: Current job UUID.
+        direct_tables: When provided, only tables in this set receive rows.
+            Tables that only have columns from shared-key propagation (not direct
+            source mappings) are excluded to prevent hollow records — for example,
+            a customer file should not write rows into ``TRD_INVOICE`` just because
+            ``Account_Number`` propagated there.  Computed by ``_process_parsed_file``
+            as tables with ≥2 non-propagated mapped columns.
+
+    Returns:
+        Tuple of:
+        - ``canonical_tables``: ``{table_name: DataFrame}`` with business + lineage + audit columns.
+        - ``source_col_maps``: ``{table_name: {canonical_col -> source_col}}`` used by the DQ engine.
     """
     ts = datetime.now(timezone.utc).isoformat()
 

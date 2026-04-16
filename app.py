@@ -47,6 +47,15 @@ CONFIG_DIR = os.path.dirname(__file__)
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
 
 def _discover_domains(config_dir: str) -> list[str]:
+    """Scan the domains/ directory and return all valid domain keys.
+
+    A directory is treated as a valid domain if it contains both
+    ``<domain>_system_config.json`` and ``<domain>_canonical_model.json``.
+    Hidden directories (starting with ``.`` or ``_``) are skipped.
+
+    Returns a sorted list of domain key strings (e.g. ``["finance", "trade"]``).
+    Falls back to an empty list if the ``domains/`` directory does not exist.
+    """
     domains_dir = Path(config_dir) / "domains"
     if not domains_dir.exists():
         return []
@@ -301,7 +310,20 @@ def _canonical_target_options(canonical_model: dict) -> list[str]:
 
 
 def add_override_from_dropdowns(selected_source: str, selected_target: str, override_text: str):
-    """Validate and add one override from the guardrail dropdowns."""
+    """Add one column mapping override using the typo-safe guardrail dropdowns.
+
+    Both the source column and canonical target are chosen from populated
+    dropdowns, so invalid strings cannot be entered by accident.  The override
+    is appended to (or replaces an existing entry in) the free-text override box.
+
+    Args:
+        selected_source: Source column name chosen from the source-column dropdown.
+        selected_target: Canonical target in ``TABLE.Column`` form from the target dropdown.
+        override_text: Current contents of the override textbox (multiline).
+
+    Returns:
+        Tuple of (updated_override_text, status_html).
+    """
     if not selected_source:
         return override_text, "<p style='color:#c0392b'>Select a source column first.</p>"
     if not selected_target or "." not in selected_target:
@@ -358,9 +380,26 @@ def analyze_mappings(
     apply_to: str,
     override_text: str,
 ):
-    """
-    Step 1: parse input + run mapping only, then expose mapping suggestions
-    with confidence scores before full pipeline execution.
+    """Step 1 of the two-step UI workflow: parse files, check profiles, run column mapping.
+
+    Executes before any canonical rows are written.  Results are shown in the
+    scorecard so the user can review and correct mappings before committing.
+
+    Profile matching runs first on each uploaded file:
+    - **EXACT match** (fingerprint hit): cached scorecard restored, mapping
+      engine skipped for that file, overrides pre-seeded in the textbox.
+    - **PARTIAL match** (≥70% column overlap): amber suggestion banner shown;
+      "Apply Suggested Profile Overrides" button becomes visible.
+    - **No match**: full mapping engine runs normally.
+
+    Multiple files in the batch are handled independently per file; their
+    scorecard rows are combined into one dataframe with a ``Source_File`` column.
+
+    Returns 9 outputs wired to Gradio components:
+        analysis_html, mapping_scorecard_df,
+        source_col_dropdown, target_col_dropdown,
+        run_btn_state, completion_banner_html,
+        profile_banner_html, override_text, partial_match_fp_state
     """
     empty_df = pd.DataFrame(columns=[
         "Source_File", "Source_Column", "Suggested_Target", "Selected_Target",
@@ -609,7 +648,28 @@ def ui_save_profile(
     profile_name: str,
     scorecard_df,
 ):
-    """Save current file columns + full mapping scorecard + overrides as a named profile."""
+    """Persist the current file shape, column overrides, and full scorecard as a named profile.
+
+    A profile fingerprints the source file's column headers so that future
+    uploads with the same columns can auto-apply the saved overrides and, when
+    the full scorecard is stored, skip the mapping engine entirely.
+
+    In multi-file batches one profile is saved per distinct file shape, with the
+    file's basename appended to the user-supplied name
+    (e.g. ``"Monthly Batch — invoices.csv"``).
+
+    Args:
+        uploaded_file: Gradio file object(s) — list or single item.
+        domain: Active domain key (e.g. ``"trade"``).
+        override_text: Current multiline override textbox contents.
+        profile_name: User-supplied display name for the profile.
+        scorecard_df: Mapping scorecard dataframe from the Analyze step.
+            Stored in the profile so EXACT matches can restore it without
+            re-running the mapping engine.
+
+    Returns:
+        Tuple of (status_html, updated_profiles_dataframe).
+    """
     if not uploaded_file:
         return "<p style='color:#c0392b'>Upload a file first before saving a profile.</p>", gr.update()
     if not profile_name or not profile_name.strip():
@@ -699,7 +759,21 @@ def ui_save_profile(
 
 
 def ui_apply_suggested_profile(partial_fp: str, override_text: str, domain: str):
-    """Apply a partial-match profile's overrides into override_text."""
+    """Merge a partial-match profile's overrides into the override textbox.
+
+    Called when the user clicks "Apply Suggested Profile Overrides" after
+    seeing an amber partial-match banner.  Existing user-supplied overrides
+    take precedence over the profile's saved overrides (user intent wins).
+
+    Args:
+        partial_fp: Full SHA-256 fingerprint of the partial-match profile,
+            stored in the ``partial_match_fp`` Gradio State component.
+        override_text: Current override textbox contents.
+        domain: Active domain key.
+
+    Returns:
+        Tuple of (updated_override_text, status_html).
+    """
     if not partial_fp:
         return override_text, "<p style='color:#888'>No partial profile to apply.</p>"
     from engine.profile_store import _load_profile
@@ -719,7 +793,19 @@ def ui_apply_suggested_profile(partial_fp: str, override_text: str, domain: str)
 
 
 def ui_delete_profile(fp: str, domain: str):
-    """Delete a profile by its 8-char short ID."""
+    """Delete a saved profile by its 8-character short ID from the Profiles tab.
+
+    Looks up the full fingerprint by prefix-matching the 8-char ID, removes the
+    profile file and its index entry, and returns a refreshed profiles table.
+
+    Args:
+        fp: First 8 characters of the profile's SHA-256 fingerprint
+            (as shown in the Profiles tab ``ID (8-char)`` column).
+        domain: Active domain key.
+
+    Returns:
+        Tuple of (status_html, updated_profiles_dataframe).
+    """
     # Find full fingerprint from index
     from engine.profile_store import _load_index
     index = _load_index(CONFIG_DIR, domain)
@@ -732,7 +818,12 @@ def ui_delete_profile(fp: str, domain: str):
 
 
 def _profiles_table(domain: str) -> pd.DataFrame:
-    """Build a DataFrame of saved profiles for display."""
+    """Build a display DataFrame of all saved profiles for the Profiles tab.
+
+    Reads the lightweight index (never loads individual profile files directly)
+    except to fetch the override count, which requires one load per profile.
+    Returns columns: ID (8-char), Name, Columns, Overrides saved, Uses, Last Used.
+    """
     profiles = list_profiles(CONFIG_DIR, domain)
     if not profiles:
         return pd.DataFrame(columns=["ID (8-char)", "Name", "Columns", "Overrides saved", "Uses", "Last Used"])
@@ -753,7 +844,22 @@ def _profiles_table(domain: str) -> pd.DataFrame:
 
 
 def apply_scorecard_overrides(scorecard_df, override_text: str):
-    """Read any edited Selected_Target cells from the scorecard and save as overrides."""
+    """Promote inline scorecard edits to the persistent override textbox.
+
+    Users can directly edit the ``Selected_Target`` column in the scorecard
+    dataframe.  This function reads those cells, compares them to the engine's
+    ``Suggested_Target``, and saves any differences as named overrides.
+
+    Only rows where ``Selected_Target != Suggested_Target`` are saved.
+    Existing overrides in the textbox are preserved (they are merged, not replaced).
+
+    Args:
+        scorecard_df: The Gradio dataframe component value (DataFrame or list of dicts).
+        override_text: Current contents of the override textbox.
+
+    Returns:
+        Tuple of (updated_override_text, status_html describing how many overrides were saved).
+    """
     if scorecard_df is None or (hasattr(scorecard_df, "empty") and scorecard_df.empty):
         return override_text, "<p style='color:#888'>No scorecard data to read.</p>"
 

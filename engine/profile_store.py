@@ -74,7 +74,18 @@ class MatchResult:
 # ---------------------------------------------------------------------------
 
 def fingerprint(columns: list[str]) -> str:
-    """SHA-256 of lowercase-sorted column names joined by '|'."""
+    """Return a SHA-256 hex digest that uniquely identifies a set of column headers.
+
+    Normalisation applied before hashing: strip whitespace, lowercase, sort.
+    This means column order and case are irrelevant — two files with the same
+    columns in any order will produce the same fingerprint.
+
+    Args:
+        columns: Raw column header strings from the source file.
+
+    Returns:
+        64-character lowercase hex SHA-256 digest.
+    """
     normalised = sorted(c.strip().lower() for c in columns)
     return hashlib.sha256("|".join(normalised).encode()).hexdigest()
 
@@ -219,14 +230,26 @@ def save_profile(
     config_dir: str,
     mappings: list[dict] | None = None,
 ) -> Profile:
-    """
-    Save or update a mapping profile.
+    """Save or update a named mapping profile for a specific file shape.
 
-    overrides format: {source_col: "TABLE.Column"}
-    mappings: full scorecard rows (list of dicts). When provided, EXACT matches
-              can skip the mapping engine entirely on future runs.
-    If a profile with the same fingerprint already exists it is updated
-    (overrides merged, mappings replaced, use_count preserved, name updated if changed).
+    Args:
+        columns: Source file column headers (used to compute the fingerprint).
+        overrides: Human-approved column mappings in ``{source_col: "TABLE.Column"}`` form.
+        name: Display name shown in the Profiles tab.
+        domain: Domain key (e.g. ``"trade"``). Controls the storage subdirectory.
+        config_dir: Root config directory; profiles are written to
+            ``<config_dir>/profiles/<domain>/``.
+        mappings: Full scorecard rows (list of dicts with the same keys as the
+            UI scorecard dataframe). When provided, a future EXACT match can
+            restore the scorecard and skip the mapping engine entirely.
+
+    Returns:
+        The saved :class:`Profile` object.
+
+    Notes:
+        If a profile with the same fingerprint already exists, its overrides are
+        merged (new overrides take precedence) and its ``use_count`` is preserved.
+        The ``mappings`` list is always replaced with the latest value when provided.
     """
     fp = fingerprint(columns)
     now = datetime.now(timezone.utc).date().isoformat()
@@ -275,7 +298,17 @@ def save_profile(
 
 
 def increment_use_count(fp: str, config_dir: str, domain: str) -> None:
-    """Call after auto-applying a profile to keep use_count accurate."""
+    """Increment the use counter and update ``last_used`` for a saved profile.
+
+    Should be called immediately after a profile is auto-applied (EXACT match)
+    so the Profiles tab reflects real usage frequency. Updates both the
+    lightweight index and the full profile file.
+
+    Args:
+        fp: Full SHA-256 fingerprint of the profile.
+        config_dir: Root config directory.
+        domain: Domain key.
+    """
     index = _load_index(config_dir, domain)
     if fp not in index:
         return
@@ -292,13 +325,33 @@ def increment_use_count(fp: str, config_dir: str, domain: str) -> None:
 
 
 def list_profiles(config_dir: str, domain: str) -> list[dict]:
-    """Return all profile metadata entries sorted by use_count desc."""
+    """Return metadata for all saved profiles, sorted by use count descending.
+
+    Reads only ``index.json`` — does not load individual profile files.
+
+    Args:
+        config_dir: Root config directory.
+        domain: Domain key.
+
+    Returns:
+        List of metadata dicts (fingerprint, name, column_count, use_count, last_used).
+        Empty list if no profiles exist yet.
+    """
     index = _load_index(config_dir, domain)
     return sorted(index.values(), key=lambda x: x.get("use_count", 0), reverse=True)
 
 
 def delete_profile(fp: str, config_dir: str, domain: str) -> bool:
-    """Delete a profile by fingerprint. Returns True if deleted."""
+    """Delete a profile and remove it from the index.
+
+    Args:
+        fp: Full SHA-256 fingerprint of the profile to delete.
+        config_dir: Root config directory.
+        domain: Domain key.
+
+    Returns:
+        ``True`` if the profile was found and deleted; ``False`` if not found.
+    """
     index = _load_index(config_dir, domain)
     if fp not in index:
         return False
