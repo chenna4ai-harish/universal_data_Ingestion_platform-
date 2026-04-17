@@ -1,16 +1,41 @@
 {
-  "3617d3b4ff9d2c34448f4764d7a183816f03ce7eaf43e006d6d59ae0d930440b": {
-    "fingerprint": "3617d3b4ff9d2c34448f4764d7a183816f03ce7eaf43e006d6d59ae0d930440b",
-    "name": "profile_1 \u2014 customers_exact.csv",
+  "05502213a2a09ae0fc607e8e6bb732c82f88ae312eafda88d9348d5c51f8200b": {
+    "fingerprint": "05502213a2a09ae0fc607e8e6bb732c82f88ae312eafda88d9348d5c51f8200b",
+    "name": "Demo1 \u2014 demo_01_customers_clean.csv",
     "column_count": 10,
-    "use_count": 22,
-    "last_used": "2026-04-16"
+    "columns": [
+      "account_number",
+      "address_1",
+      "address_2",
+      "city",
+      "company_name",
+      "country_code",
+      "duns_number",
+      "government_id",
+      "postcode",
+      "state"
+    ],
+    "use_count": 4,
+    "last_used": "2026-04-17"
   },
   "c56e97e61f2cb61cfdd82d60d52e551445b02a43dde52f6ad1eef77d22502758": {
     "fingerprint": "c56e97e61f2cb61cfdd82d60d52e551445b02a43dde52f6ad1eef77d22502758",
-    "name": "profile_1 \u2014 invoices_exact.csv",
+    "name": "Demo1 \u2014 demo_01_invoices_clean.csv",
     "column_count": 11,
-    "use_count": 46,
-    "last_used": "2026-04-16"
+    "columns": [
+      "account_number",
+      "currency",
+      "doe",
+      "due_date",
+      "invoice_amount",
+      "invoice_date",
+      "invoice_number",
+      "invoice_type",
+      "paid_amount",
+      "paid_date",
+      "payment_terms"
+    ],
+    "use_count": 9,
+    "last_used": "2026-04-17"
   }
 }
